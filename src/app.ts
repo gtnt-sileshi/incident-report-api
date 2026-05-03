@@ -49,6 +49,15 @@ export function createApp(): Application {
 
   // ─── Health Check ───────────────────────────────────────────────────────────
 
+  app.get('/', (_req: Request, res: Response) => {
+    res.json({
+      message: 'Welcome to the Exam Incident & Support Portal API',
+      version: '1.0.0',
+      health: '/health',
+      docs: '/api-docs', // Placeholder if you have Swagger
+    });
+  });
+
   app.get('/health', (_req: Request, res: Response) => {
     res.json({
       status: 'ok',
@@ -58,6 +67,19 @@ export function createApp(): Application {
   });
 
   // ─── API Routes ─────────────────────────────────────────────────────────────
+
+  app.get('/api', (_req: Request, res: Response) => {
+    res.json({
+      message: 'Exam Incident & Support Portal API is running',
+      endpoints: [
+        '/api/auth',
+        '/api/organizations',
+        '/api/users',
+        '/api/incidents',
+        // ... add more as needed
+      ],
+    });
+  });
 
   app.use('/api/auth', authRouter);
   app.use('/api/organizations', organizationsRouter);

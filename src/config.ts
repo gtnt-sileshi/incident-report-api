@@ -31,8 +31,9 @@ const envSchema = z.object({
   // VAPID Keys for Web Push
   VAPID_PUBLIC_KEY: z.string().min(1, 'VAPID_PUBLIC_KEY is required'),
   VAPID_PRIVATE_KEY: z.string().min(1, 'VAPID_PRIVATE_KEY is required'),
-  VAPID_SUBJECT: z.string().email('VAPID_SUBJECT must be a mailto: email address').or(
-    z.string().url('VAPID_SUBJECT must be a URL or mailto: address'),
+  VAPID_SUBJECT: z.string().refine(
+    (val) => val.startsWith('mailto:') || z.string().url().safeParse(val).success,
+    { message: 'VAPID_SUBJECT must be a URL or mailto: address' }
   ),
 
   // Firebase Cloud Messaging
