@@ -5,8 +5,12 @@ import {
   UpdateStatusSchema,
   AssignIncidentSchema,
   AddCommentSchema,
+  EscalateIncidentSchema,
 } from './incident.service';
 import { attachmentService } from './attachment.service';
+import { commentRepository } from './comment.repository';
+import { attachmentRepository } from './attachment.repository';
+import { auditLogRepository } from '../audit/audit-log.repository';
 
 /**
  * GET /api/incidents
@@ -68,7 +72,7 @@ export async function createIncident(
 
 /**
  * GET /api/incidents/:id
- * Gets a single incident by ID.
+ * Gets a single incident by ID, including comments, attachments, and audit log.
  * Requirements: 1.3, 9.1
  */
 export async function getIncident(
@@ -86,7 +90,50 @@ export async function getIncident(
       orgId: user.orgId,
     });
 
-    res.json({ data: incident });
+    // Fetch related data in parallel
+    const [comments, attachments, auditEntries] = await Promise.all([
+      commentRepository.findByIncident(id),
+      attachmentRepository.findByIncident(id),
+      auditLogRepository.findByIncident(id),
+    ]);
+
+    // Enrich comments with author names
+    const { userRepository } = await import('../users/user.repository');
+    const authorIds = [...new Set(comments.map((c) => c.authorId))];
+    const authorMap = new Map<string, string>();
+    await Promise.all(
+      authorIds.map(async (authorId) => {
+        const author = await userRepository.findById(authorId);
+        if (author) authorMap.set(authorId, author.name);
+      }),
+    );
+    const enrichedComments = comments.map((c) => ({
+      ...c,
+      authorName: authorMap.get(c.authorId) ?? null,
+    }));
+
+    // Enrich audit entries with actor names
+    const actorIds = [...new Set(auditEntries.map((e) => e.actorUserId))];
+    const actorMap = new Map<string, string>();
+    await Promise.all(
+      actorIds.map(async (actorId) => {
+        const actor = await userRepository.findById(actorId);
+        if (actor) actorMap.set(actorId, actor.name);
+      }),
+    );
+    const enrichedAudit = auditEntries.map((e) => ({
+      ...e,
+      actorName: actorMap.get(e.actorUserId) ?? null,
+    }));
+
+    res.json({
+      data: {
+        ...incident,
+        comments: enrichedComments,
+        attachments,
+        auditLog: enrichedAudit,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -176,7 +223,7 @@ export async function addComment(
 
 /**
  * POST /api/incidents/:id/escalate
- * Manually escalates an incident to MoE.
+ * Escalates an incident to a specified organization.
  * Requirements: 7.7, 7.8, 7.9
  */
 export async function escalateIncident(
@@ -187,9 +234,11 @@ export async function escalateIncident(
   try {
     const user = req.user!;
     const { id } = req.params;
+    const { orgId } = EscalateIncidentSchema.parse(req.body);
 
     const incident = await incidentService.escalateIncident(
       id,
+      orgId,
       { sub: user.sub, role: user.role, orgId: user.orgId },
     );
 

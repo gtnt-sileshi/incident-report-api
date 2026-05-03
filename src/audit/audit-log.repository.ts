@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, asc } from 'drizzle-orm';
+import { eq, and, gte, lte, asc, count as drizzleCount } from 'drizzle-orm';
 import { getDb } from '../db/index';
 import { auditLog, AuditLogEntry, NewAuditLogEntry } from '../db/schema';
 
@@ -32,6 +32,26 @@ export class AuditLogRepository {
       .from(auditLog)
       .where(eq(auditLog.incidentId, incidentId))
       .orderBy(asc(auditLog.occurredAt));
+  }
+
+  async count(filters: AuditLogFilters = {}): Promise<number> {
+    const conditions = [];
+    if (filters.incidentId)  conditions.push(eq(auditLog.incidentId, filters.incidentId));
+    if (filters.actorUserId) conditions.push(eq(auditLog.actorUserId, filters.actorUserId));
+    if (filters.actorOrgId)  conditions.push(eq(auditLog.actorOrgId, filters.actorOrgId));
+    if (filters.deviceId)    conditions.push(eq(auditLog.deviceId, filters.deviceId));
+    if (filters.actionType)  conditions.push(eq(auditLog.actionType, filters.actionType));
+    if (filters.fromDate)    conditions.push(gte(auditLog.occurredAt, filters.fromDate));
+    if (filters.toDate)      conditions.push(lte(auditLog.occurredAt, filters.toDate));
+
+    const query = this.db.select({ count: drizzleCount() }).from(auditLog);
+    const result = conditions.length === 0
+      ? await query
+      : conditions.length === 1
+        ? await query.where(conditions[0])
+        : await query.where(and(...conditions));
+
+    return Number(result[0]?.count ?? 0);
   }
 
   async search(

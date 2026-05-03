@@ -46,7 +46,16 @@ export async function listUsers(
       throw new AppError(401, 'UNAUTHORIZED', 'Authentication required');
     }
 
-    const users = await userService.listUsers(req.user);
+    // Allow filtering by orgId query param (Super_Admin only — others are already scoped)
+    const orgIdFilter = req.query['orgId'] as string | undefined;
+
+    let users;
+    if (req.user.role === 'super_admin' && orgIdFilter) {
+      users = await userService.listUsersByOrg(orgIdFilter);
+    } else {
+      users = await userService.listUsers(req.user);
+    }
+
     res.status(200).json({ users });
   } catch (err) {
     next(err);
@@ -171,6 +180,7 @@ export async function getMe(
         phoneNumber: user.phoneNumber,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
+        device: user.device,
       },
       effectivePermissions,
     });

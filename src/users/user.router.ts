@@ -70,10 +70,50 @@ router.patch(
 );
 
 /**
- * POST /api/users/:userId/exam-assignments
- * Assigns an exam field to a user (creates an Exam_Center_Assignment).
+ * PUT /api/users/:userId/exam-assignments
+ * Replaces all exam field assignments for a user in one call.
  * Requirements: 3.2, 3.6
  */
+router.put(
+  '/:userId/exam-assignments',
+  authenticate,
+  requirePermission('exam_fields.edit'),
+  async (req, res, next) => {
+    try {
+      const { userId } = req.params;
+      const { examFieldIds } = req.body as { examFieldIds: string[] };
+      const { examCenterAssignmentRepository } = await import('../devices/exam-center-assignment.repository');
+      await examCenterAssignmentRepository.replaceAssignments(userId, examFieldIds ?? []);
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * GET /api/users/:userId/exam-assignments
+ * Returns all exam field assignments for a user.
+ * Requirements: 3.2
+ */
+router.get(
+  '/:userId/exam-assignments',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      const { userId } = req.params;
+      const { examCenterAssignmentRepository } = await import('../devices/exam-center-assignment.repository');
+      const { examFieldRepository } = await import('../devices/exam-field.repository');
+      const assignments = await examCenterAssignmentRepository.findByUser(userId);
+      const fields = await Promise.all(
+        assignments.map(a => examFieldRepository.findById(a.examFieldId))
+      );
+      res.json({ examFields: fields.filter(Boolean) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 router.post(
   '/:userId/exam-assignments',
   authenticate,

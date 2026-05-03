@@ -4,18 +4,23 @@ import { examFieldService } from './exam-field.service';
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
+const coordSchema = z.union([
+  z.string().regex(/^-?\d{1,3}(\.\d{1,8})?$/),
+  z.number().transform(n => n.toString()),
+]).optional();
+
 const createExamFieldSchema = z.object({
   name: z.string().min(1).max(255),
   location: z.string().max(500).optional(),
-  latitude: z.string().regex(/^-?\d{1,3}\.\d{1,6}$/).optional(),
-  longitude: z.string().regex(/^-?\d{1,3}\.\d{1,6}$/).optional(),
+  latitude: coordSchema,
+  longitude: coordSchema,
 });
 
 const updateExamFieldSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   location: z.string().max(500).optional(),
-  latitude: z.string().regex(/^-?\d{1,3}\.\d{1,6}$/).optional(),
-  longitude: z.string().regex(/^-?\d{1,3}\.\d{1,6}$/).optional(),
+  latitude: coordSchema,
+  longitude: coordSchema,
   isActive: z.boolean().optional(),
 });
 

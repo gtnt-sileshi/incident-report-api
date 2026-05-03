@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { userRepository } from '../users/user.repository';
+import { organizationRepository } from '../organizations/organization.repository';
 import { deviceRepository } from '../devices/device.repository';
 import { jwtService } from './jwt.service';
 import { deviceService } from './device.service';
@@ -58,7 +59,22 @@ export async function login(
       type: 'user',
     });
 
-    // 6. Return token + safe user fields
+    // 6. Clear any existing revocation entry so the new token is accepted
+    await jwtService.clearRevocation(user.id);
+
+    // 6. Fetch org name + effective permissions in parallel (no Redis check needed here)
+    const [org, userPerms, orgPerms] = await Promise.all([
+      organizationRepository.findById(user.orgId),
+      userRepository.getUserPermissions(user.id),
+      organizationRepository.getOrgPermissions(user.orgId),
+    ]);
+
+    const orgPermNames = new Set(orgPerms.map((p) => p.name));
+    const effectivePermissions = userPerms
+      .map((p) => p.name)
+      .filter((name) => orgPermNames.has(name));
+
+    // 7. Return token + full user profile + effective permissions
     res.status(200).json({
       token,
       user: {
@@ -67,6 +83,8 @@ export async function login(
         email: user.email,
         role: user.role,
         orgId: user.orgId,
+        orgName: org?.name ?? '',
+        permissions: effectivePermissions,
       },
     });
   } catch (err) {

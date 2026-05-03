@@ -81,6 +81,15 @@ export class JwtService {
   }
 
   /**
+   * Removes the revocation entry for a user so a freshly issued token is accepted.
+   * Called on login to clear any stale revocation from a previous logout.
+   */
+  async clearRevocation(userId: string): Promise<void> {
+    const redis = getRedis();
+    await redis.del(`revoked:user:${userId}`);
+  }
+
+  /**
    * Returns true if the token's userId OR orgId has been revoked.
    * Checks individual keys: revoked:user:{userId} and revoked:org:{orgId}
    */

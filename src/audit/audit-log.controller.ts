@@ -1,21 +1,29 @@
 import { Request, Response, NextFunction } from 'express';
 import { auditLogRepository, AuditLogFilters } from './audit-log.repository';
+import { userRepository } from '../users/user.repository';
+import { AuditLogEntry } from '../db/schema';
+
+// Cache user names to avoid N+1 on large audit log pages
+async function enrichWithActorNames(entries: AuditLogEntry[]) {
+  const userIds = [...new Set(entries.map((e) => e.actorUserId))];
+  const userMap = new Map<string, string>();
+
+  await Promise.all(
+    userIds.map(async (id) => {
+      const user = await userRepository.findById(id);
+      if (user) userMap.set(id, user.name);
+    }),
+  );
+
+  return entries.map((e) => ({
+    ...e,
+    actorName: userMap.get(e.actorUserId) ?? null,
+  }));
+}
 
 /**
  * GET /api/audit-log
- *
- * Returns a paginated, filtered list of audit log entries.
- *
- * Accepted query parameters:
- *   userId      — filter by actor user ID
- *   deviceId    — filter by device ID
- *   orgId       — filter by actor org ID
- *   examFieldId — (informational; stored in newValue for field-related actions)
- *   dateFrom    — ISO 8601 date string (inclusive lower bound on occurred_at)
- *   dateTo      — ISO 8601 date string (inclusive upper bound on occurred_at)
- *   actionType  — filter by action type string
- *   limit       — max entries to return (default 100)
- *   offset      — pagination offset (default 0)
+ * Returns a paginated, filtered list of audit log entries with actor names.
  */
 export async function listAuditLog(
   req: Request,
@@ -32,10 +40,10 @@ export async function listAuditLog(
       dateTo,
       limit: limitStr,
       offset: offsetStr,
+      page: pageStr,
     } = req.query as Record<string, string | undefined>;
 
     const filters: AuditLogFilters = {};
-
     if (userId)     filters.actorUserId = userId;
     if (deviceId)   filters.deviceId    = deviceId;
     if (orgId)      filters.actorOrgId  = orgId;
@@ -43,12 +51,18 @@ export async function listAuditLog(
     if (dateFrom)   filters.fromDate    = new Date(dateFrom);
     if (dateTo)     filters.toDate      = new Date(dateTo);
 
-    const limit  = limitStr  ? parseInt(limitStr,  10) : 100;
-    const offset = offsetStr ? parseInt(offsetStr, 10) : 0;
+    const limit  = limitStr  ? parseInt(limitStr,  10) : 25;
+    const page   = pageStr   ? parseInt(pageStr,   10) : 1;
+    const offset = offsetStr ? parseInt(offsetStr, 10) : (page - 1) * limit;
 
-    const entries = await auditLogRepository.search(filters, limit, offset);
+    const [entries, total] = await Promise.all([
+      auditLogRepository.search(filters, limit, offset),
+      auditLogRepository.count(filters),
+    ]);
 
-    res.json({ data: entries, limit, offset });
+    const enriched = await enrichWithActorNames(entries);
+
+    res.json({ data: enriched, total, page, limit });
   } catch (err) {
     next(err);
   }
@@ -56,9 +70,7 @@ export async function listAuditLog(
 
 /**
  * GET /api/audit-log/incident/:incidentId
- *
- * Returns all audit log entries for a specific incident, ordered by
- * occurred_at ascending (chronological timeline).
+ * Returns all audit log entries for a specific incident with actor names.
  */
 export async function getIncidentAuditLog(
   req: Request,
@@ -67,10 +79,9 @@ export async function getIncidentAuditLog(
 ): Promise<void> {
   try {
     const { incidentId } = req.params;
-
     const entries = await auditLogRepository.findByIncident(incidentId);
-
-    res.json({ data: entries });
+    const enriched = await enrichWithActorNames(entries);
+    res.json({ data: enriched });
   } catch (err) {
     next(err);
   }

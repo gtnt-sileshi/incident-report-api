@@ -5,7 +5,7 @@ import { deviceRepository } from '../devices/device.repository';
 import { jwtService } from '../auth/jwt.service';
 import { qrCredentialRepository } from '../qr/qr-credential.repository';
 import { AppError } from '../middleware/errorHandler';
-import { User, NewUser } from '../db/schema';
+import { User, NewUser, Device } from '../db/schema';
 import { JwtPayload } from '../auth/jwt.service';
 
 export interface CreateUserData {
@@ -25,6 +25,11 @@ export interface UpdateUserData {
   role?: string;
   phoneNumber?: string;
   isActive?: boolean;
+}
+
+export interface UserWithDevice extends Omit<User, 'passwordHash'> {
+  orgName?: string;
+  device: Pick<Device, 'id' | 'deviceId' | 'isActive' | 'registeredAt' | 'lastSeenAt'> | null;
 }
 
 export class UserService {
@@ -198,27 +203,53 @@ export class UserService {
    * Fetches a single user by ID.
    * Requirements: 13.1, 13.2
    */
-  async getUser(id: string): Promise<User> {
+  async getUser(id: string): Promise<UserWithDevice> {
     const user = await userRepository.findById(id);
     if (!user) {
       throw new AppError(404, 'USER_NOT_FOUND', `User ${id} not found`);
     }
-    return user;
+    return this.attachDevice(user);
   }
 
   /**
-   * Lists users scoped by the requesting user's role:
-   * - Super_Admin: sees all users across all organizations
-   * - Org_Admin: sees only users within their own organization
-   * Requirements: 13.1, 13.2, 13.6
+   * Lists users filtered by a specific org (for Super_Admin use).
    */
-  async listUsers(requestingUser: JwtPayload): Promise<User[]> {
+  async listUsersByOrg(orgId: string): Promise<UserWithDevice[]> {
+    const userList = await userRepository.findAll(orgId, false);
+    return Promise.all(userList.map((u) => this.attachDevice(u)));
+  }
+  async listUsers(requestingUser: JwtPayload): Promise<UserWithDevice[]> {
+    let userList: User[];
     if (requestingUser.role === 'super_admin') {
-      return userRepository.findAll(undefined, false);
+      userList = await userRepository.findAll(undefined, false);
+    } else {
+      userList = await userRepository.findAll(requestingUser.orgId, false);
     }
+    return Promise.all(userList.map((u) => this.attachDevice(u)));
+  }
 
-    // Org_Admin and all other roles: scoped to their own org
-    return userRepository.findAll(requestingUser.orgId, false);
+  /**
+   * Attaches device info and org name to a user, strips passwordHash.
+   */
+  private async attachDevice(user: User): Promise<UserWithDevice> {
+    const [device, org] = await Promise.all([
+      deviceRepository.findByUserId(user.id),
+      organizationRepository.findById(user.orgId),
+    ]);
+    const { passwordHash: _omit, ...safeUser } = user;
+    return {
+      ...safeUser,
+      orgName: org?.name,
+      device: device
+        ? {
+            id: device.id,
+            deviceId: device.deviceId,
+            isActive: device.isActive,
+            registeredAt: device.registeredAt,
+            lastSeenAt: device.lastSeenAt,
+          }
+        : null,
+    };
   }
 
   /**

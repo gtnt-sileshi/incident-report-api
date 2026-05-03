@@ -14,6 +14,7 @@ import qrRouter from './qr/qr.router';
 import pushRouter from './push/push.router';
 import syncRouter from './sync/sync.router';
 import reportsRouter from './reports/report.router';
+import notificationsRouter from './notifications/notification.router';
 
 /**
  * Creates and configures the Express application.
@@ -71,6 +72,7 @@ export function createApp(): Application {
   app.use('/api/push', pushRouter);
   app.use('/api/sync', syncRouter);
   app.use('/api/reports', reportsRouter);
+  app.use('/api/notifications', notificationsRouter);
 
   // ─── 404 Handler ────────────────────────────────────────────────────────────
 

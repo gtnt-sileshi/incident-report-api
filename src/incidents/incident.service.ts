@@ -33,6 +33,11 @@ export const AssignIncidentSchema = z.object({
   reason: z.string().optional(),
 });
 
+export const EscalateIncidentSchema = z.object({
+  orgId: z.string().uuid(),
+  reason: z.string().optional(),
+});
+
 export const AddCommentSchema = z.object({
   content: z.string().min(1),
 });
@@ -40,6 +45,7 @@ export const AddCommentSchema = z.object({
 export type CreateIncidentData  = z.infer<typeof CreateIncidentSchema>;
 export type UpdateStatusData    = z.infer<typeof UpdateStatusSchema>;
 export type AssignIncidentData  = z.infer<typeof AssignIncidentSchema>;
+export type EscalateIncidentData = z.infer<typeof EscalateIncidentSchema>;
 
 // ─── Status Order ─────────────────────────────────────────────────────────────
 
@@ -670,14 +676,12 @@ export class IncidentService {
   }
 
   /**
-   * Manually escalates an incident to MoE.
-   *
-   * - Sends push notifications to MoE and Bureau Staff
-   *
+   * Escalates an incident to a specified organization.
    * Requirements: 7.7, 7.8, 7.9, 14.1, 14.2, 12.1
    */
   async escalateIncident(
     incidentId:     string,
+    targetOrgId:    string,
     requestingUser: RequestingUser,
   ): Promise<Incident> {
     const incident = await incidentRepository.findById(incidentId);
@@ -685,15 +689,15 @@ export class IncidentService {
       throw new AppError(404, 'INCIDENT_NOT_FOUND', `Incident ${incidentId} not found`);
     }
 
-    // Look up MoE org
-    const moeOrg = await organizationRepository.findByName('MoE');
-    if (!moeOrg) {
-      throw new AppError(500, 'MOE_ORG_NOT_FOUND', 'MoE organization not found in the system');
+    // Validate target org exists
+    const targetOrg = await organizationRepository.findById(targetOrgId);
+    if (!targetOrg) {
+      throw new AppError(404, 'ORG_NOT_FOUND', `Organization ${targetOrgId} not found`);
     }
 
     const previousOrgId = incident.assignedOrgId;
 
-    const updated = await incidentRepository.updateAssignment(incidentId, moeOrg.id, null);
+    const updated = await incidentRepository.updateAssignment(incidentId, targetOrgId, null);
     if (!updated) {
       throw new AppError(404, 'INCIDENT_NOT_FOUND', `Incident ${incidentId} not found`);
     }
@@ -707,7 +711,7 @@ export class IncidentService {
       actionType:    'incident_escalated',
       fieldChanged:  'assigned_org_id',
       previousValue: previousOrgId ?? null,
-      newValue:      moeOrg.id,
+      newValue:      targetOrgId,
     });
 
     // Publish WebSocket event (non-blocking)
