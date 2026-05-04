@@ -68,7 +68,13 @@ async function seedSuperAdmin(config: SuperAdminConfig = DEFAULT_CONFIG) {
       console.log(`   📧 Email: ${existingUser.email}`);
       console.log(`   👤 Name: ${existingUser.name}`);
       console.log(`   🏢 Role: ${existingUser.role}`);
-      console.log('\n   To reset password, delete the user first or use a different email.\n');
+      console.log(`   🏢 Role: ${existingUser.role}`);
+      console.log(`\n🔐 Resetting password for existing super admin...`);
+      const passwordHash = await bcrypt.hash(config.password, 10);
+      await db.update(users)
+        .set({ passwordHash, isActive: true })
+        .where(eq(users.id, existingUser.id));
+      console.log(`   ✅ Password reset successfully\n`);
       return existingUser;
     }
 
