@@ -34,7 +34,6 @@ export async function listAuditLog(
     const {
       userId,
       deviceId,
-      orgId,
       actionType,
       dateFrom,
       dateTo,
@@ -46,7 +45,6 @@ export async function listAuditLog(
     const filters: AuditLogFilters = {};
     if (userId)     filters.actorUserId = userId;
     if (deviceId)   filters.deviceId    = deviceId;
-    if (orgId)      filters.actorOrgId  = orgId;
     if (actionType) filters.actionType  = actionType;
     if (dateFrom)   filters.fromDate    = new Date(dateFrom);
     if (dateTo)     filters.toDate      = new Date(dateTo);

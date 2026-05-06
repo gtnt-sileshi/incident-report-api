@@ -2,11 +2,8 @@ import { eq, and } from 'drizzle-orm';
 import { getDb } from '../db/index';
 import {
   users,
-  userPermissions,
-  permissions,
   User,
   NewUser,
-  Permission,
 } from '../db/schema';
 
 export class UserRepository {
@@ -14,11 +11,11 @@ export class UserRepository {
     return getDb();
   }
 
-  async findAll(orgId?: string, includeInactive = false): Promise<User[]> {
+  async findAll(regionId?: string, includeInactive = false): Promise<User[]> {
     const conditions = [];
 
-    if (orgId) {
-      conditions.push(eq(users.orgId, orgId));
+    if (regionId) {
+      conditions.push(eq(users.regionId, regionId));
     }
     if (!includeInactive) {
       conditions.push(eq(users.isActive, true));
@@ -29,6 +26,14 @@ export class UserRepository {
     }
     if (conditions.length === 1) {
       return this.db.select().from(users).where(conditions[0]);
+    }
+    return this.db.select().from(users).where(and(...conditions));
+  }
+
+  async findAllByRole(role: string, includeInactive = false): Promise<User[]> {
+    const conditions = [eq(users.role, role)];
+    if (!includeInactive) {
+      conditions.push(eq(users.isActive, true));
     }
     return this.db.select().from(users).where(and(...conditions));
   }
@@ -75,70 +80,6 @@ export class UserRepository {
       .where(eq(users.id, id))
       .returning();
     return rows[0] ?? null;
-  }
-
-  async getUserPermissions(userId: string): Promise<Permission[]> {
-    const rows = await this.db
-      .select({
-        id: permissions.id,
-        name: permissions.name,
-        groupName: permissions.groupName,
-      })
-      .from(userPermissions)
-      .innerJoin(permissions, eq(userPermissions.permissionId, permissions.id))
-      .where(eq(userPermissions.userId, userId));
-    return rows;
-  }
-
-  async setUserPermissions(userId: string, permissionIds: number[]): Promise<void> {
-    await this.db.transaction(async (tx) => {
-      await tx
-        .delete(userPermissions)
-        .where(eq(userPermissions.userId, userId));
-
-      if (permissionIds.length > 0) {
-        await tx.insert(userPermissions).values(
-          permissionIds.map((permissionId) => ({ userId, permissionId })),
-        );
-      }
-    });
-  }
-
-  async removePermissionFromUser(userId: string, permissionId: number): Promise<void> {
-    await this.db
-      .delete(userPermissions)
-      .where(
-        and(
-          eq(userPermissions.userId, userId),
-          eq(userPermissions.permissionId, permissionId),
-        ),
-      );
-  }
-
-  async removePermissionFromAllOrgUsers(orgId: string, permissionId: number): Promise<void> {
-    // Get all user IDs in the org
-    const orgUsers = await this.db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.orgId, orgId));
-
-    if (orgUsers.length === 0) return;
-
-    const userIds = orgUsers.map((u) => u.id);
-
-    // Delete the permission from all those users in a transaction
-    await this.db.transaction(async (tx) => {
-      for (const userId of userIds) {
-        await tx
-          .delete(userPermissions)
-          .where(
-            and(
-              eq(userPermissions.userId, userId),
-              eq(userPermissions.permissionId, permissionId),
-            ),
-          );
-      }
-    });
   }
 }
 

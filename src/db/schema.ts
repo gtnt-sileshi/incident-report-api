@@ -1,9 +1,3 @@
-/**
- * Drizzle ORM schema — mirrors all 18 tables from migration 001.
- * Used by repositories for type-safe query building.
- * The source of truth for table structure is still the SQL migration files.
- */
-
 import {
   pgTable,
   uuid,
@@ -11,65 +5,103 @@ import {
   boolean,
   timestamp,
   text,
-  decimal,
   integer,
-  serial,
   bigserial,
   unique,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
-// ─── Organizations ────────────────────────────────────────────────────────────
+// ─── Exam Periods ────────────────────────────────────────────────────────────
 
-export const organizations = pgTable('organizations', {
+export const examPeriods = pgTable('exam_periods', {
   id:        uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   name:      varchar('name', { length: 255 }).notNull().unique(),
-  type:      varchar('type', { length: 100 }).notNull(),
+  startDate: timestamp('start_date', { withTimezone: true }).notNull(),
+  endDate:   timestamp('end_date', { withTimezone: true }).notNull(),
+  isActive:  boolean('is_active').notNull().default(false),
+});
+
+// ─── Exam Structure (Regions, Zones, Woredas) ────────────────────────────────
+
+export const regions = pgTable('regions', {
+  id:        uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name:      varchar('name', { length: 255 }).notNull().unique(),
+  code:      varchar('code', { length: 50 }).unique(),
   isActive:  boolean('is_active').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Permissions ─────────────────────────────────────────────────────────────
-
-export const permissions = pgTable('permissions', {
-  id:        serial('id').primaryKey(),
-  name:      varchar('name', { length: 100 }).notNull().unique(),
-  groupName: varchar('group_name', { length: 100 }).notNull(),
+export const zones = pgTable('zones', {
+  id:        uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  regionId:  uuid('region_id').notNull().references(() => regions.id),
+  name:      varchar('name', { length: 255 }).notNull(),
+  code:      varchar('code', { length: 50 }),
 });
 
-// ─── Org Permissions ─────────────────────────────────────────────────────────
+export const woredas = pgTable('woredas', {
+  id:        uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  zoneId:    uuid('zone_id').notNull().references(() => zones.id),
+  name:      varchar('name', { length: 255 }).notNull(),
+  code:      varchar('code', { length: 50 }),
+});
 
-export const orgPermissions = pgTable('org_permissions', {
-  orgId:        uuid('org_id').notNull().references(() => organizations.id),
-  permissionId: integer('permission_id').notNull().references(() => permissions.id),
-}, (t) => ({
-  pk: unique().on(t.orgId, t.permissionId),
-}));
+// ─── Clusters ────────────────────────────────────────────────────────────────
 
-// ─── Users ───────────────────────────────────────────────────────────────────
+export const powerClusters = pgTable('power_clusters', {
+  id:            uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name:          varchar('name', { length: 255 }).notNull(),
+  code:          varchar('code', { length: 50 }).unique(),
+  contactPerson: varchar('contact_person', { length: 255 }),
+  contactPhone:  varchar('contact_phone', { length: 50 }),
+});
+
+export const internetClusters = pgTable('internet_clusters', {
+  id:            uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name:          varchar('name', { length: 255 }).notNull(),
+  code:          varchar('code', { length: 50 }).unique(),
+  contactPerson: varchar('contact_person', { length: 255 }),
+  contactPhone:  varchar('contact_phone', { length: 50 }),
+});
+
+// ─── Exam Centers & Rooms ────────────────────────────────────────────────────
+
+export const examCenters = pgTable('exam_centers', {
+  id:                uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  woredaId:          uuid('woreda_id').notNull().references(() => woredas.id),
+  powerClusterId:    uuid('power_cluster_id').references(() => powerClusters.id),
+  internetClusterId: uuid('internet_cluster_id').references(() => internetClusters.id),
+  name:              varchar('name', { length: 255 }).notNull(),
+  code:              varchar('code', { length: 50 }).unique(),
+  contactPerson:     varchar('contact_person', { length: 255 }),
+  isActive:          boolean('is_active').notNull().default(true),
+});
+
+export const examRooms = pgTable('exam_rooms', {
+  id:           uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  examCenterId: uuid('exam_center_id').notNull().references(() => examCenters.id),
+  name:         varchar('name', { length: 255 }).notNull(),
+  capacity:     integer('capacity'),
+  isActive:     boolean('is_active').notNull().default(true),
+});
+
+// ─── Users & Roles ───────────────────────────────────────────────────────────
 
 export const users = pgTable('users', {
-  id:           uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  orgId:        uuid('org_id').notNull().references(() => organizations.id),
-  name:         varchar('name', { length: 255 }).notNull(),
-  email:        varchar('email', { length: 255 }).unique(),
-  passwordHash: varchar('password_hash', { length: 255 }),
-  role:         varchar('role', { length: 50 }).notNull(),
-  isActive:     boolean('is_active').notNull().default(true),
-  phoneNumber:  varchar('phone_number', { length: 30 }),
-  createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt:    timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  id:                uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name:              varchar('name', { length: 255 }).notNull(),
+  email:             varchar('email', { length: 255 }).unique(),
+  phoneNumber:       varchar('phone_number', { length: 30 }),
+  passwordHash:      varchar('password_hash', { length: 255 }),
+  role:              varchar('role', { length: 50 }).notNull(), // Invigilator, Site supervisor, etc.
+  isActive:          boolean('is_active').notNull().default(true),
+  // Scope bindings for users (Attribute-Based Access Control)
+  regionId:          uuid('region_id').references(() => regions.id),
+  examCenterId:      uuid('exam_center_id').references(() => examCenters.id),
+  examRoomId:        uuid('exam_room_id').references(() => examRooms.id),
+  powerClusterId:    uuid('power_cluster_id').references(() => powerClusters.id),
+  internetClusterId: uuid('internet_cluster_id').references(() => internetClusters.id),
+  createdAt:         timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
-
-// ─── User Permissions ─────────────────────────────────────────────────────────
-
-export const userPermissions = pgTable('user_permissions', {
-  userId:       uuid('user_id').notNull().references(() => users.id),
-  permissionId: integer('permission_id').notNull().references(() => permissions.id),
-}, (t) => ({
-  pk: unique().on(t.userId, t.permissionId),
-}));
 
 // ─── Devices ─────────────────────────────────────────────────────────────────
 
@@ -77,79 +109,68 @@ export const devices = pgTable('devices', {
   id:           uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   deviceId:     varchar('device_id', { length: 255 }).notNull().unique(),
   userId:       uuid('user_id').unique().references(() => users.id),
+  deviceName:   varchar('device_name', { length: 255 }),
+  isApproved:   boolean('is_approved').notNull().default(false), // FR-006: Device Approval
   isActive:     boolean('is_active').notNull().default(true),
   registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt:   timestamp('last_seen_at', { withTimezone: true }),
 });
 
-// ─── Exam Fields ─────────────────────────────────────────────────────────────
+// ─── Incident Types & Categories ─────────────────────────────────────────────
 
-export const examFields = pgTable('exam_fields', {
-  id:        uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  name:      varchar('name', { length: 255 }).notNull().unique(),
-  location:  varchar('location', { length: 500 }),
-  latitude:  decimal('latitude', { precision: 9, scale: 6 }),
-  longitude: decimal('longitude', { precision: 9, scale: 6 }),
-  isActive:  boolean('is_active').notNull().default(true),
-});
-
-// ─── Exam Center Assignments ──────────────────────────────────────────────────
-
-export const examCenterAssignments = pgTable('exam_center_assignments', {
+export const issueCategories = pgTable('issue_categories', {
   id:          uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  userId:      uuid('user_id').notNull().references(() => users.id),
-  examFieldId: uuid('exam_field_id').notNull().references(() => examFields.id),
-  assignedAt:  timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => ({
-  uniq: unique().on(t.userId, t.examFieldId),
-}));
-
-// ─── Incident Types ───────────────────────────────────────────────────────────
+  name:        varchar('name', { length: 255 }).notNull().unique(), // System, Power, Internet, etc.
+});
 
 export const incidentTypes = pgTable('incident_types', {
-  id:              uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  name:            varchar('name', { length: 255 }).notNull().unique(),
-  defaultPriority: varchar('default_priority', { length: 10 }).notNull(),
-  description:     text('description'),
-  isActive:        boolean('is_active').notNull().default(true),
-  createdAt:       timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt:       timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  id:                   uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  categoryId:           uuid('category_id').notNull().references(() => issueCategories.id),
+  name:                 varchar('name', { length: 255 }).notNull().unique(),
+  defaultPriority:      varchar('default_priority', { length: 20 }).notNull(),
+  description:          text('description'),
+  requiresAttachment:   boolean('requires_attachment').notNull().default(false),
+  requiresExplanation:  boolean('requires_explanation').notNull().default(false),
+  slaResponseMinutes:   integer('sla_response_minutes'),
+  slaResolutionMinutes: integer('sla_resolution_minutes'),
+  isActive:             boolean('is_active').notNull().default(true),
 });
 
-// ─── Routing Rules ────────────────────────────────────────────────────────────
-
-export const routingRules = pgTable('routing_rules', {
-  id:             uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  incidentTypeId: uuid('incident_type_id').notNull().references(() => incidentTypes.id),
-  targetOrgId:    uuid('target_org_id').references(() => organizations.id),
-  targetUserId:   uuid('target_user_id').references(() => users.id),
-  autoAssign:     boolean('auto_assign').notNull().default(false),
-  isActive:       boolean('is_active').notNull().default(true),
-  createdAt:      timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt:      timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-// ─── Incidents ────────────────────────────────────────────────────────────────
+// ─── Incidents (Issues) ──────────────────────────────────────────────────────
 
 export const incidents = pgTable('incidents', {
-  id:               uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  examFieldId:      uuid('exam_field_id').notNull().references(() => examFields.id),
-  incidentTypeId:   uuid('incident_type_id').notNull().references(() => incidentTypes.id),
-  reportedByUserId: uuid('reported_by_user_id').notNull().references(() => users.id),
-  deviceId:         uuid('device_id').references(() => devices.id),
-  priority:         varchar('priority', { length: 10 }).notNull(),
-  status:           varchar('status', { length: 20 }).notNull().default('Reported'),
-  description:      text('description'),
-  assignedOrgId:    uuid('assigned_org_id').references(() => organizations.id),
-  assignedUserId:   uuid('assigned_user_id').references(() => users.id),
-  resolvedAt:       timestamp('resolved_at', { withTimezone: true }),
+  id:                uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  trackingNumber:    varchar('tracking_number', { length: 50 }).unique(), // NEIMS-2026-AA-000001
+  incidentTypeId:    uuid('incident_type_id').notNull().references(() => incidentTypes.id),
+  regionId:          uuid('region_id').references(() => regions.id),
+  examCenterId:      uuid('exam_center_id').references(() => examCenters.id),
+  examRoomId:        uuid('exam_room_id').references(() => examRooms.id),
+  reportedByUserId:  uuid('reported_by_user_id').notNull().references(() => users.id),
+  deviceId:          uuid('device_id').references(() => devices.id),
+  priority:          varchar('priority', { length: 20 }).notNull(),
+  status:            varchar('status', { length: 30 }).notNull().default('Reported'),
+  description:       text('description'),
+  assignedUserId:    uuid('assigned_user_id').references(() => users.id),
+  resolvedAt:        timestamp('resolved_at', { withTimezone: true }),
   resolutionSummary: text('resolution_summary'),
-  localId:          varchar('local_id', { length: 255 }),
-  createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  reopenCount:       integer('reopen_count').notNull().default(0),
+  localId:           varchar('local_id', { length: 255 }), // For offline sync
+  createdAt:         timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Attachments ──────────────────────────────────────────────────────────────
+// ─── Incident Status History ─────────────────────────────────────────────────
+
+export const incidentStatusHistory = pgTable('incident_status_history', {
+  id:              uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  incidentId:      uuid('incident_id').notNull().references(() => incidents.id),
+  status:          varchar('status', { length: 30 }).notNull(),
+  changedByUserId: uuid('changed_by_user_id').notNull().references(() => users.id),
+  comment:         text('comment'),
+  createdAt:       timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Attachments ─────────────────────────────────────────────────────────────
 
 export const attachments = pgTable('attachments', {
   id:         uuid('id').primaryKey().default(sql`gen_random_uuid()`),
@@ -161,7 +182,7 @@ export const attachments = pgTable('attachments', {
   uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Comments ─────────────────────────────────────────────────────────────────
+// ─── Comments ────────────────────────────────────────────────────────────────
 
 export const comments = pgTable('comments', {
   id:         uuid('id').primaryKey().default(sql`gen_random_uuid()`),
@@ -171,36 +192,22 @@ export const comments = pgTable('comments', {
   createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Audit Log ────────────────────────────────────────────────────────────────
+// ─── Audit Log ───────────────────────────────────────────────────────────────
 
 export const auditLog = pgTable('audit_log', {
   id:            bigserial('id', { mode: 'number' }).primaryKey(),
   incidentId:    uuid('incident_id').references(() => incidents.id),
   actorUserId:   uuid('actor_user_id').notNull().references(() => users.id),
   actorRole:     varchar('actor_role', { length: 50 }).notNull(),
-  actorOrgId:    uuid('actor_org_id').notNull().references(() => organizations.id),
   deviceId:      varchar('device_id', { length: 255 }),
   actionType:    varchar('action_type', { length: 100 }).notNull(),
   fieldChanged:  varchar('field_changed', { length: 100 }),
   previousValue: text('previous_value'),
   newValue:      text('new_value'),
-  routingRuleId: uuid('routing_rule_id').references(() => routingRules.id),
   occurredAt:    timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── QR Credentials ───────────────────────────────────────────────────────────
-
-export const qrCredentials = pgTable('qr_credentials', {
-  id:             uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  userId:         uuid('user_id').notNull().references(() => users.id),
-  payload:        text('payload').notNull(),
-  signature:      text('signature').notNull(),
-  isValid:        boolean('is_valid').notNull().default(true),
-  issuedAt:       timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
-  invalidatedAt:  timestamp('invalidated_at', { withTimezone: true }),
-});
-
-// ─── Notifications ────────────────────────────────────────────────────────────
+// ─── Utility Tables (Notifications, QR, SMS, Push Tokens) ────────────────────
 
 export const notifications = pgTable('notifications', {
   id:         uuid('id').primaryKey().default(sql`gen_random_uuid()`),
@@ -211,7 +218,15 @@ export const notifications = pgTable('notifications', {
   createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── SMS Log ──────────────────────────────────────────────────────────────────
+export const qrCredentials = pgTable('qr_credentials', {
+  id:             uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  userId:         uuid('user_id').notNull().references(() => users.id),
+  payload:        text('payload').notNull(),
+  signature:      text('signature').notNull(),
+  isValid:        boolean('is_valid').notNull().default(true),
+  issuedAt:       timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
+  invalidatedAt:  timestamp('invalidated_at', { withTimezone: true }),
+});
 
 export const smsLog = pgTable('sms_log', {
   id:             uuid('id').primaryKey().default(sql`gen_random_uuid()`),
@@ -225,8 +240,6 @@ export const smsLog = pgTable('sms_log', {
   createdAt:      timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Push Tokens ──────────────────────────────────────────────────────────────
-
 export const pushTokens = pgTable('push_tokens', {
   id:          uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   userId:      uuid('user_id').notNull().references(() => users.id),
@@ -239,64 +252,90 @@ export const pushTokens = pgTable('push_tokens', {
   uniq: unique().on(t.userId, t.tokenType, t.deviceId),
 }));
 
-// ─── Relations ────────────────────────────────────────────────────────────────
-
-export const organizationsRelations = relations(organizations, ({ many }) => ({
-  users:          many(users),
-  orgPermissions: many(orgPermissions),
-  routingRules:   many(routingRules),
-}));
+// ─── Relations ───────────────────────────────────────────────────────────────
 
 export const usersRelations = relations(users, ({ one, many }) => ({
-  organization:    one(organizations, { fields: [users.orgId], references: [organizations.id] }),
-  userPermissions: many(userPermissions),
+  region:          one(regions, { fields: [users.regionId], references: [regions.id] }),
+  examCenter:      one(examCenters, { fields: [users.examCenterId], references: [examCenters.id] }),
+  examRoom:        one(examRooms, { fields: [users.examRoomId], references: [examRooms.id] }),
   device:          one(devices, { fields: [users.id], references: [devices.userId] }),
-  examAssignments: many(examCenterAssignments),
   incidents:       many(incidents),
   notifications:   many(notifications),
-  qrCredentials:   many(qrCredentials),
 }));
 
 export const incidentsRelations = relations(incidents, ({ one, many }) => ({
-  examField:    one(examFields,    { fields: [incidents.examFieldId],    references: [examFields.id] }),
   incidentType: one(incidentTypes, { fields: [incidents.incidentTypeId], references: [incidentTypes.id] }),
   reporter:     one(users,         { fields: [incidents.reportedByUserId], references: [users.id] }),
-  assignedOrg:  one(organizations, { fields: [incidents.assignedOrgId],  references: [organizations.id] }),
   assignedUser: one(users,         { fields: [incidents.assignedUserId], references: [users.id] }),
+  examCenter:   one(examCenters,   { fields: [incidents.examCenterId], references: [examCenters.id] }),
+  examRoom:     one(examRooms,     { fields: [incidents.examRoomId], references: [examRooms.id] }),
+  region:       one(regions,       { fields: [incidents.regionId], references: [regions.id] }),
   attachments:  many(attachments),
   comments:     many(comments),
   auditLog:     many(auditLog),
-  notifications: many(notifications),
+  statusHistory:many(incidentStatusHistory),
+  notifications:many(notifications),
 }));
 
-// ─── Inferred Types ───────────────────────────────────────────────────────────
+export const examCentersRelations = relations(examCenters, ({ one, many }) => ({
+  woreda:          one(woredas, { fields: [examCenters.woredaId], references: [woredas.id] }),
+  powerCluster:    one(powerClusters, { fields: [examCenters.powerClusterId], references: [powerClusters.id] }),
+  internetCluster: one(internetClusters, { fields: [examCenters.internetClusterId], references: [internetClusters.id] }),
+  rooms:           many(examRooms),
+  incidents:       many(incidents),
+}));
 
-export type Organization       = typeof organizations.$inferSelect;
-export type NewOrganization    = typeof organizations.$inferInsert;
-export type Permission         = typeof permissions.$inferSelect;
-export type User               = typeof users.$inferSelect;
-export type NewUser            = typeof users.$inferInsert;
-export type Device             = typeof devices.$inferSelect;
-export type NewDevice          = typeof devices.$inferInsert;
-export type ExamField          = typeof examFields.$inferSelect;
-export type NewExamField       = typeof examFields.$inferInsert;
-export type IncidentType       = typeof incidentTypes.$inferSelect;
-export type NewIncidentType    = typeof incidentTypes.$inferInsert;
-export type RoutingRule        = typeof routingRules.$inferSelect;
-export type NewRoutingRule     = typeof routingRules.$inferInsert;
-export type Incident           = typeof incidents.$inferSelect;
-export type NewIncident        = typeof incidents.$inferInsert;
-export type Attachment         = typeof attachments.$inferSelect;
-export type Comment            = typeof comments.$inferSelect;
-export type NewComment         = typeof comments.$inferInsert;
-export type AuditLogEntry      = typeof auditLog.$inferSelect;
-export type NewAuditLogEntry   = typeof auditLog.$inferInsert;
-export type QrCredential       = typeof qrCredentials.$inferSelect;
-export type Notification       = typeof notifications.$inferSelect;
-export type NewNotification    = typeof notifications.$inferInsert;
-export type SmsLog             = typeof smsLog.$inferSelect;
-export type NewSmsLog          = typeof smsLog.$inferInsert;
-export type ExamCenterAssignment    = typeof examCenterAssignments.$inferSelect;
-export type NewExamCenterAssignment = typeof examCenterAssignments.$inferInsert;
-export type PushToken          = typeof pushTokens.$inferSelect;
-export type NewPushToken       = typeof pushTokens.$inferInsert;
+export const examRoomsRelations = relations(examRooms, ({ one, many }) => ({
+  examCenter: one(examCenters, { fields: [examRooms.examCenterId], references: [examCenters.id] }),
+  incidents:  many(incidents),
+}));
+
+export type ExamPeriod       = typeof examPeriods.$inferSelect;
+export type NewExamPeriod    = typeof examPeriods.$inferInsert;
+
+export type Region           = typeof regions.$inferSelect;
+export type NewRegion        = typeof regions.$inferInsert;
+export type Zone             = typeof zones.$inferSelect;
+export type NewZone          = typeof zones.$inferInsert;
+export type Woreda           = typeof woredas.$inferSelect;
+export type NewWoreda        = typeof woredas.$inferInsert;
+
+export type PowerCluster     = typeof powerClusters.$inferSelect;
+export type NewPowerCluster  = typeof powerClusters.$inferInsert;
+export type InternetCluster  = typeof internetClusters.$inferSelect;
+export type NewInternetCluster = typeof internetClusters.$inferInsert;
+
+export type ExamCenter       = typeof examCenters.$inferSelect;
+export type NewExamCenter    = typeof examCenters.$inferInsert;
+export type ExamRoom         = typeof examRooms.$inferSelect;
+export type NewExamRoom      = typeof examRooms.$inferInsert;
+
+export type User             = typeof users.$inferSelect;
+export type NewUser          = typeof users.$inferInsert;
+
+export type Device           = typeof devices.$inferSelect;
+export type NewDevice        = typeof devices.$inferInsert;
+
+export type IssueCategory    = typeof issueCategories.$inferSelect;
+export type NewIssueCategory = typeof issueCategories.$inferInsert;
+export type IncidentType     = typeof incidentTypes.$inferSelect;
+export type NewIncidentType  = typeof incidentTypes.$inferInsert;
+
+export type Incident         = typeof incidents.$inferSelect;
+export type NewIncident      = typeof incidents.$inferInsert;
+export type IncidentStatusHistory = typeof incidentStatusHistory.$inferSelect;
+export type NewIncidentStatusHistory = typeof incidentStatusHistory.$inferInsert;
+
+export type Attachment       = typeof attachments.$inferSelect;
+export type Comment          = typeof comments.$inferSelect;
+export type NewComment       = typeof comments.$inferInsert;
+export type AuditLogEntry    = typeof auditLog.$inferSelect;
+export type NewAuditLogEntry = typeof auditLog.$inferInsert;
+
+export type Notification     = typeof notifications.$inferSelect;
+export type NewNotification  = typeof notifications.$inferInsert;
+export type QrCredential     = typeof qrCredentials.$inferSelect;
+export type SmsLog           = typeof smsLog.$inferSelect;
+export type NewSmsLog        = typeof smsLog.$inferInsert;
+export type PushToken        = typeof pushTokens.$inferSelect;
+export type NewPushToken     = typeof pushTokens.$inferInsert;

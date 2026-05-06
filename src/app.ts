@@ -2,12 +2,9 @@ import express, { Application, Request, Response } from 'express';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
 import authRouter from './auth/auth.router';
-import organizationsRouter from './organizations/organization.router';
 import usersRouter from './users/user.router';
 import devicesRouter from './devices/device.router';
-import examFieldsRouter from './devices/exam-field.router';
 import catalogRouter from './catalog/catalog.router';
-import routingRulesRouter from './routing/routing-rule.router';
 import incidentsRouter from './incidents/incident.router';
 import auditLogRouter from './audit/audit-log.router';
 import qrRouter from './qr/qr.router';
@@ -85,8 +82,6 @@ export function createApp(): Application {
       message: 'Exam Incident & Support Portal API is running',
       endpoints: [
         '/api/auth',
-        '/api/organizations',
-        '/api/users',
         '/api/incidents',
         // ... add more as needed
       ],
@@ -94,12 +89,9 @@ export function createApp(): Application {
   });
 
   app.use('/api/auth', authRouter);
-  app.use('/api/organizations', organizationsRouter);
   app.use('/api/users', usersRouter);
   app.use('/api/devices', devicesRouter);
-  app.use('/api/exam-fields', examFieldsRouter);
   app.use('/api/catalog', catalogRouter);
-  app.use('/api/routing-rules', routingRulesRouter);
   app.use('/api/incidents', incidentsRouter);
   app.use('/api/audit-log', auditLogRouter);
   app.use('/api/qr', qrRouter);

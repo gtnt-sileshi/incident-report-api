@@ -5,6 +5,7 @@ import { incidentTypeService } from './incident-type.service';
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
 const createIncidentTypeSchema = z.object({
+  categoryId: z.string().uuid(),
   name: z.string().min(1).max(255),
   defaultPriority: z.enum(['Low', 'Medium', 'High']),
   description: z.string().optional(),

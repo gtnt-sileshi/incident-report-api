@@ -5,10 +5,8 @@ import { auditLog, AuditLogEntry, NewAuditLogEntry } from '../db/schema';
 export interface AuditLogFilters {
   incidentId?: string;
   actorUserId?: string;
-  actorOrgId?: string;
   deviceId?: string;
   actionType?: string;
-  examFieldId?: string;
   fromDate?: Date;
   toDate?: Date;
 }
@@ -38,7 +36,6 @@ export class AuditLogRepository {
     const conditions = [];
     if (filters.incidentId)  conditions.push(eq(auditLog.incidentId, filters.incidentId));
     if (filters.actorUserId) conditions.push(eq(auditLog.actorUserId, filters.actorUserId));
-    if (filters.actorOrgId)  conditions.push(eq(auditLog.actorOrgId, filters.actorOrgId));
     if (filters.deviceId)    conditions.push(eq(auditLog.deviceId, filters.deviceId));
     if (filters.actionType)  conditions.push(eq(auditLog.actionType, filters.actionType));
     if (filters.fromDate)    conditions.push(gte(auditLog.occurredAt, filters.fromDate));
@@ -66,9 +63,6 @@ export class AuditLogRepository {
     }
     if (filters.actorUserId) {
       conditions.push(eq(auditLog.actorUserId, filters.actorUserId));
-    }
-    if (filters.actorOrgId) {
-      conditions.push(eq(auditLog.actorOrgId, filters.actorOrgId));
     }
     if (filters.deviceId) {
       conditions.push(eq(auditLog.deviceId, filters.deviceId));

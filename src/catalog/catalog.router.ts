@@ -5,15 +5,20 @@ import {
   updateIncidentType,
   deleteIncidentType,
 } from './incident-type.controller';
+import {
+  listRegions,
+  createRegion,
+  listExamCenters,
+  listPowerClusters,
+  listInternetClusters,
+} from './location.controller';
 import { authenticate } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 
 const router = Router();
 
 /**
- * GET /api/catalog/incident-types
- * Lists all incident types (active only by default).
- * Requirements: 19.5, 19.6
+ * ─── Incident Types ──────────────────────────────────────────────────────────
  */
 router.get(
   '/incident-types',
@@ -22,11 +27,6 @@ router.get(
   listIncidentTypes,
 );
 
-/**
- * POST /api/catalog/incident-types
- * Creates a new incident type.
- * Requirements: 19.2, 19.3
- */
 router.post(
   '/incident-types',
   authenticate,
@@ -34,11 +34,6 @@ router.post(
   createIncidentType,
 );
 
-/**
- * PATCH /api/catalog/incident-types/:id
- * Updates an existing incident type (including active/inactive toggle).
- * Requirements: 19.3, 19.4
- */
 router.patch(
   '/incident-types/:id',
   authenticate,
@@ -46,16 +41,20 @@ router.patch(
   updateIncidentType,
 );
 
-/**
- * DELETE /api/catalog/incident-types/:id
- * Soft-deletes an incident type (rejects if referenced).
- * Requirements: 19.7, 19.8
- */
 router.delete(
   '/incident-types/:id',
   authenticate,
   requirePermission('catalog.delete'),
   deleteIncidentType,
 );
+
+/**
+ * ─── Location Hierarchy ──────────────────────────────────────────────────────
+ */
+router.get('/regions', authenticate, requirePermission('catalog.view'), listRegions);
+router.post('/regions', authenticate, requirePermission('catalog.create'), createRegion);
+router.get('/exam-centers', authenticate, requirePermission('catalog.view'), listExamCenters);
+router.get('/power-clusters', authenticate, requirePermission('catalog.view'), listPowerClusters);
+router.get('/internet-clusters', authenticate, requirePermission('catalog.view'), listInternetClusters);
 
 export default router;

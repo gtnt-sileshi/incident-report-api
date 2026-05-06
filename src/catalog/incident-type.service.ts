@@ -16,7 +16,7 @@ export class IncidentTypeService {
    * Requirements: 19.2, 19.3
    */
   async createIncidentType(
-    data: Pick<NewIncidentType, 'name' | 'defaultPriority' | 'description'>,
+    data: Pick<NewIncidentType, 'name' | 'categoryId' | 'defaultPriority' | 'description'>,
   ): Promise<IncidentType> {
     // Check for name uniqueness
     const existing = await incidentTypeRepository.findByName(data.name);
@@ -30,6 +30,7 @@ export class IncidentTypeService {
 
     return incidentTypeRepository.create({
       name: data.name,
+      categoryId: data.categoryId,
       defaultPriority: data.defaultPriority,
       description: data.description ?? null,
     });
@@ -78,14 +79,13 @@ export class IncidentTypeService {
     // Check referential integrity: routing rules and historical incidents
     const refs = await incidentTypeRepository.countReferences(id);
 
-    if (refs.incidents > 0 || refs.routingRules > 0) {
+    if (refs.incidents > 0) {
       throw new AppError(
         409,
         'INCIDENT_TYPE_HAS_REFERENCES',
         `Cannot delete incident type "${incidentType.name}" because it is referenced by existing records`,
         {
           incidentCount: refs.incidents,
-          routingRuleCount: refs.routingRules,
         },
       );
     }

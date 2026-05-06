@@ -1,5 +1,5 @@
 import { getDb } from '../db/index';
-import { incidents, incidentTypes, examFields, organizations } from '../db/schema';
+import { incidents, incidentTypes, examCenters, regions } from '../db/schema';
 import { eq, and, gte, lte, sql, isNotNull } from 'drizzle-orm';
 
 /**
@@ -9,19 +9,20 @@ export interface ReportFilters {
   examCycle?: string;
   startDate?: Date;
   endDate?: Date;
-  examFieldId?: string;
+  regionId?: string;
+  examCenterId?: string;
   incidentTypeId?: string;
-  orgId?: string;
+  assignedUserId?: string;
 }
 
 /**
- * Aggregated incident metrics per type and organization
+ * Aggregated incident metrics per type and region
  */
 export interface IncidentMetrics {
   incidentTypeId: string;
   incidentTypeName: string;
-  orgId: string | null;
-  orgName: string | null;
+  regionId: string | null;
+  regionName: string | null;
   totalIncidents: number;
   resolvedIncidents: number;
   avgTimeToResolveMinutes: number | null;
@@ -30,11 +31,11 @@ export interface IncidentMetrics {
 }
 
 /**
- * Disruption metrics per exam field
+ * Disruption metrics per exam center
  */
 export interface DisruptionMetrics {
-  examFieldId: string;
-  examFieldName: string;
+  examCenterId: string | null;
+  examCenterName: string;
   totalIncidents: number;
   avgDisruptionMinutes: number | null;
   highPriorityCount: number;
@@ -45,16 +46,16 @@ export interface DisruptionMetrics {
  */
 export interface PostCycleSummary {
   avgResolutionTimeMinutes: number | null;
-  incidentsPerField: Array<{
-    examFieldId: string;
-    examFieldName: string;
+  incidentsPerCenter: Array<{
+    examCenterId: string | null;
+    examCenterName: string;
     incidentCount: number;
   }>;
   recurringProblems: Array<{
     incidentTypeId: string;
     incidentTypeName: string;
-    examFieldId: string;
-    examFieldName: string;
+    examCenterId: string | null;
+    examCenterName: string;
     frequency: number;
   }>;
 }
@@ -80,16 +81,6 @@ export class ReportService {
     return getDb();
   }
 
-  /**
-   * Generates an incident report with aggregated metrics.
-   * 
-   * Aggregates:
-   * - Time-to-resolve per incident type and organization
-   * - Average disruption minutes per exam field
-   * - Percentage of incidents resolved within threshold
-   * 
-   * Requirements: 11.1, 11.5
-   */
   async generateIncidentReport(filters: ReportFilters = {}): Promise<ReportData> {
     const [metrics, disruption, summary] = await Promise.all([
       this.getIncidentMetrics(filters),
@@ -106,33 +97,20 @@ export class ReportService {
     };
   }
 
-  /**
-   * Generates a post-exam-cycle summary report.
-   * 
-   * Includes:
-   * - Average resolution time across all incidents
-   * - Incidents per exam field
-   * - Recurring problem areas (incident type + field combinations with high frequency)
-   * 
-   * Requirements: 11.5
-   */
   async generatePostCycleSummary(filters: ReportFilters = {}): Promise<PostCycleSummary> {
-    const [avgResolutionTime, incidentsPerField, recurringProblems] = await Promise.all([
+    const [avgResolutionTime, incidentsPerCenter, recurringProblems] = await Promise.all([
       this.getAvgResolutionTime(filters),
-      this.getIncidentsPerField(filters),
+      this.getIncidentsPerCenter(filters),
       this.getRecurringProblems(filters),
     ]);
 
     return {
       avgResolutionTimeMinutes: avgResolutionTime,
-      incidentsPerField,
+      incidentsPerCenter,
       recurringProblems,
     };
   }
 
-  /**
-   * Gets aggregated metrics per incident type and organization.
-   */
   private async getIncidentMetrics(filters: ReportFilters): Promise<IncidentMetrics[]> {
     const conditions = this.buildWhereConditions(filters);
 
@@ -140,8 +118,8 @@ export class ReportService {
       .select({
         incidentTypeId: incidents.incidentTypeId,
         incidentTypeName: incidentTypes.name,
-        orgId: incidents.assignedOrgId,
-        orgName: organizations.name,
+        regionId: incidents.regionId,
+        regionName: regions.name,
         totalIncidents: sql<number>`COUNT(${incidents.id})::int`,
         resolvedIncidents: sql<number>`COUNT(CASE WHEN ${incidents.status} = 'Resolved' THEN 1 END)::int`,
         avgTimeToResolveMinutes: sql<number | null>`
@@ -169,20 +147,20 @@ export class ReportService {
       })
       .from(incidents)
       .leftJoin(incidentTypes, eq(incidents.incidentTypeId, incidentTypes.id))
-      .leftJoin(organizations, eq(incidents.assignedOrgId, organizations.id))
+      .leftJoin(regions, eq(incidents.regionId, regions.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .groupBy(
         incidents.incidentTypeId,
         incidentTypes.name,
-        incidents.assignedOrgId,
-        organizations.name,
+        incidents.regionId,
+        regions.name,
       );
 
     return results.map((row) => ({
       incidentTypeId: row.incidentTypeId,
       incidentTypeName: row.incidentTypeName ?? 'Unknown',
-      orgId: row.orgId,
-      orgName: row.orgName,
+      regionId: row.regionId,
+      regionName: row.regionName,
       totalIncidents: row.totalIncidents,
       resolvedIncidents: row.resolvedIncidents,
       avgTimeToResolveMinutes: row.avgTimeToResolveMinutes,
@@ -194,16 +172,13 @@ export class ReportService {
     }));
   }
 
-  /**
-   * Gets disruption metrics per exam field.
-   */
   private async getDisruptionMetrics(filters: ReportFilters): Promise<DisruptionMetrics[]> {
     const conditions = this.buildWhereConditions(filters);
 
     const results = await this.db
       .select({
-        examFieldId: incidents.examFieldId,
-        examFieldName: examFields.name,
+        examCenterId: incidents.examCenterId,
+        examCenterName: examCenters.name,
         totalIncidents: sql<number>`COUNT(${incidents.id})::int`,
         avgDisruptionMinutes: sql<number | null>`
           AVG(
@@ -217,22 +192,19 @@ export class ReportService {
         highPriorityCount: sql<number>`COUNT(CASE WHEN ${incidents.priority} = 'High' THEN 1 END)::int`,
       })
       .from(incidents)
-      .leftJoin(examFields, eq(incidents.examFieldId, examFields.id))
+      .leftJoin(examCenters, eq(incidents.examCenterId, examCenters.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .groupBy(incidents.examFieldId, examFields.name);
+      .groupBy(incidents.examCenterId, examCenters.name);
 
     return results.map((row) => ({
-      examFieldId: row.examFieldId,
-      examFieldName: row.examFieldName ?? 'Unknown',
+      examCenterId: row.examCenterId,
+      examCenterName: row.examCenterName ?? 'Unknown',
       totalIncidents: row.totalIncidents,
       avgDisruptionMinutes: row.avgDisruptionMinutes,
       highPriorityCount: row.highPriorityCount,
     }));
   }
 
-  /**
-   * Gets overall summary metrics.
-   */
   private async getSummaryMetrics(filters: ReportFilters) {
     const conditions = this.buildWhereConditions(filters);
 
@@ -261,9 +233,6 @@ export class ReportService {
     };
   }
 
-  /**
-   * Gets average resolution time across all incidents.
-   */
   private async getAvgResolutionTime(filters: ReportFilters): Promise<number | null> {
     const conditions = this.buildWhereConditions(filters);
     conditions.push(isNotNull(incidents.resolvedAt));
@@ -280,34 +249,28 @@ export class ReportService {
     return result[0]?.avgMinutes ?? null;
   }
 
-  /**
-   * Gets incident count per exam field.
-   */
-  private async getIncidentsPerField(filters: ReportFilters) {
+  private async getIncidentsPerCenter(filters: ReportFilters) {
     const conditions = this.buildWhereConditions(filters);
 
     const results = await this.db
       .select({
-        examFieldId: incidents.examFieldId,
-        examFieldName: examFields.name,
+        examCenterId: incidents.examCenterId,
+        examCenterName: examCenters.name,
         incidentCount: sql<number>`COUNT(${incidents.id})::int`,
       })
       .from(incidents)
-      .leftJoin(examFields, eq(incidents.examFieldId, examFields.id))
+      .leftJoin(examCenters, eq(incidents.examCenterId, examCenters.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .groupBy(incidents.examFieldId, examFields.name)
+      .groupBy(incidents.examCenterId, examCenters.name)
       .orderBy(sql`COUNT(${incidents.id}) DESC`);
 
     return results.map((row) => ({
-      examFieldId: row.examFieldId,
-      examFieldName: row.examFieldName ?? 'Unknown',
+      examCenterId: row.examCenterId,
+      examCenterName: row.examCenterName ?? 'Unknown',
       incidentCount: row.incidentCount,
     }));
   }
 
-  /**
-   * Identifies recurring problem areas (incident type + field combinations with frequency >= 3).
-   */
   private async getRecurringProblems(filters: ReportFilters) {
     const conditions = this.buildWhereConditions(filters);
 
@@ -315,19 +278,19 @@ export class ReportService {
       .select({
         incidentTypeId: incidents.incidentTypeId,
         incidentTypeName: incidentTypes.name,
-        examFieldId: incidents.examFieldId,
-        examFieldName: examFields.name,
+        examCenterId: incidents.examCenterId,
+        examCenterName: examCenters.name,
         frequency: sql<number>`COUNT(${incidents.id})::int`,
       })
       .from(incidents)
       .leftJoin(incidentTypes, eq(incidents.incidentTypeId, incidentTypes.id))
-      .leftJoin(examFields, eq(incidents.examFieldId, examFields.id))
+      .leftJoin(examCenters, eq(incidents.examCenterId, examCenters.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .groupBy(
         incidents.incidentTypeId,
         incidentTypes.name,
-        incidents.examFieldId,
-        examFields.name,
+        incidents.examCenterId,
+        examCenters.name,
       )
       .having(sql`COUNT(${incidents.id}) >= 3`)
       .orderBy(sql`COUNT(${incidents.id}) DESC`);
@@ -335,15 +298,12 @@ export class ReportService {
     return results.map((row) => ({
       incidentTypeId: row.incidentTypeId,
       incidentTypeName: row.incidentTypeName ?? 'Unknown',
-      examFieldId: row.examFieldId,
-      examFieldName: row.examFieldName ?? 'Unknown',
+      examCenterId: row.examCenterId,
+      examCenterName: row.examCenterName ?? 'Unknown',
       frequency: row.frequency,
     }));
   }
 
-  /**
-   * Builds WHERE conditions based on filters.
-   */
   private buildWhereConditions(filters: ReportFilters) {
     const conditions = [];
 
@@ -355,16 +315,20 @@ export class ReportService {
       conditions.push(lte(incidents.createdAt, filters.endDate));
     }
 
-    if (filters.examFieldId) {
-      conditions.push(eq(incidents.examFieldId, filters.examFieldId));
+    if (filters.regionId) {
+      conditions.push(eq(incidents.regionId, filters.regionId));
+    }
+
+    if (filters.examCenterId) {
+      conditions.push(eq(incidents.examCenterId, filters.examCenterId));
     }
 
     if (filters.incidentTypeId) {
       conditions.push(eq(incidents.incidentTypeId, filters.incidentTypeId));
     }
 
-    if (filters.orgId) {
-      conditions.push(eq(incidents.assignedOrgId, filters.orgId));
+    if (filters.assignedUserId) {
+      conditions.push(eq(incidents.assignedUserId, filters.assignedUserId));
     }
 
     return conditions;

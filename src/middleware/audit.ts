@@ -31,14 +31,13 @@ export function auditMiddleware(actionType: string) {
         return;
       }
 
-      const { sub: actorUserId, role: actorRole, orgId: actorOrgId } = req.user;
+      const { sub: actorUserId, role: actorRole } = req.user;
 
       // Extract the primary resource ID from route params (e.g. :id, :incidentId)
       const resourceId =
         req.params.id ??
         req.params.incidentId ??
         req.params.userId ??
-        req.params.orgId ??
         null;
 
       // Fire-and-forget — do not block the response
@@ -46,7 +45,6 @@ export function auditMiddleware(actionType: string) {
         .append({
           actorUserId,
           actorRole,
-          actorOrgId,
           actionType,
           incidentId: resourceId ?? undefined,
           fieldChanged: null,

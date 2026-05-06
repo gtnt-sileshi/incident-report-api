@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
 import { userRepository } from '../users/user.repository';
-import { examCenterAssignmentRepository } from '../devices/exam-center-assignment.repository';
 import { qrCredentialRepository } from './qr-credential.repository';
 import { QrCredential } from '../db/schema';
 import { AppError } from '../middleware/errorHandler';
@@ -13,8 +12,8 @@ export interface QrPayload {
   userId: string;
   name: string;
   role: string;
-  orgId: string;
-  examFieldIds: string[];
+  regionId: string | null;
+  examCenterId: string | null;
   issuedAt: string;
   credentialId: string;
 }
@@ -63,10 +62,6 @@ export class QrService {
       throw new AppError(404, 'NOT_FOUND', `User ${userId} not found`);
     }
 
-    // Fetch exam field assignments
-    const assignments = await examCenterAssignmentRepository.findByUser(userId);
-    const examFieldIds = assignments.map((a) => a.examFieldId);
-
     // Build payload
     const credentialId = crypto.randomUUID();
     const payload: QrPayload = {
@@ -74,8 +69,8 @@ export class QrService {
       userId: user.id,
       name: user.name,
       role: user.role,
-      orgId: user.orgId,
-      examFieldIds,
+      regionId: user.regionId,
+      examCenterId: user.examCenterId,
       issuedAt: new Date().toISOString(),
       credentialId,
     };

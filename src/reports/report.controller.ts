@@ -11,18 +11,14 @@ const ReportFiltersSchema = z.object({
   examCycle: z.string().optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
-  examFieldId: z.string().uuid().optional(),
+  regionId: z.string().uuid().optional(),
+  examCenterId: z.string().uuid().optional(),
   incidentTypeId: z.string().uuid().optional(),
-  orgId: z.string().uuid().optional(),
+  assignedUserId: z.string().uuid().optional(),
 });
 
 /**
  * Generates an incident report with aggregated metrics.
- * 
- * GET /api/reports/generate
- * Query params: examCycle, startDate, endDate, examFieldId, incidentTypeId, orgId
- * 
- * Requirements: 11.1, 11.3, 11.5
  */
 export async function generateReport(
   req: Request,
@@ -30,40 +26,21 @@ export async function generateReport(
   next: NextFunction,
 ): Promise<void> {
   try {
-    // Validate query parameters
     const parsed = ReportFiltersSchema.safeParse(req.query);
     if (!parsed.success) {
       throw new AppError(400, 'INVALID_FILTERS', 'Invalid report filters', parsed.error.errors);
     }
 
-    // Build filters
     const filters: ReportFilters = {};
 
-    if (parsed.data.examCycle) {
-      filters.examCycle = parsed.data.examCycle;
-    }
+    if (parsed.data.examCycle) filters.examCycle = parsed.data.examCycle;
+    if (parsed.data.startDate) filters.startDate = new Date(parsed.data.startDate);
+    if (parsed.data.endDate) filters.endDate = new Date(parsed.data.endDate);
+    if (parsed.data.regionId) filters.regionId = parsed.data.regionId;
+    if (parsed.data.examCenterId) filters.examCenterId = parsed.data.examCenterId;
+    if (parsed.data.incidentTypeId) filters.incidentTypeId = parsed.data.incidentTypeId;
+    if (parsed.data.assignedUserId) filters.assignedUserId = parsed.data.assignedUserId;
 
-    if (parsed.data.startDate) {
-      filters.startDate = new Date(parsed.data.startDate);
-    }
-
-    if (parsed.data.endDate) {
-      filters.endDate = new Date(parsed.data.endDate);
-    }
-
-    if (parsed.data.examFieldId) {
-      filters.examFieldId = parsed.data.examFieldId;
-    }
-
-    if (parsed.data.incidentTypeId) {
-      filters.incidentTypeId = parsed.data.incidentTypeId;
-    }
-
-    if (parsed.data.orgId) {
-      filters.orgId = parsed.data.orgId;
-    }
-
-    // Generate report
     const reportData = await reportService.generateIncidentReport(filters);
 
     res.json({
@@ -77,11 +54,6 @@ export async function generateReport(
 
 /**
  * Generates a post-exam-cycle summary report.
- * 
- * GET /api/reports/post-cycle-summary
- * Query params: examCycle, startDate, endDate
- * 
- * Requirements: 11.5
  */
 export async function generatePostCycleSummary(
   req: Request,
@@ -89,28 +61,17 @@ export async function generatePostCycleSummary(
   next: NextFunction,
 ): Promise<void> {
   try {
-    // Validate query parameters
     const parsed = ReportFiltersSchema.safeParse(req.query);
     if (!parsed.success) {
       throw new AppError(400, 'INVALID_FILTERS', 'Invalid report filters', parsed.error.errors);
     }
 
-    // Build filters
     const filters: ReportFilters = {};
 
-    if (parsed.data.examCycle) {
-      filters.examCycle = parsed.data.examCycle;
-    }
+    if (parsed.data.examCycle) filters.examCycle = parsed.data.examCycle;
+    if (parsed.data.startDate) filters.startDate = new Date(parsed.data.startDate);
+    if (parsed.data.endDate) filters.endDate = new Date(parsed.data.endDate);
 
-    if (parsed.data.startDate) {
-      filters.startDate = new Date(parsed.data.startDate);
-    }
-
-    if (parsed.data.endDate) {
-      filters.endDate = new Date(parsed.data.endDate);
-    }
-
-    // Generate summary
     const summary = await reportService.generatePostCycleSummary(filters);
 
     res.json({
@@ -124,12 +85,6 @@ export async function generatePostCycleSummary(
 
 /**
  * Exports a report in the specified format (pdf or xlsx).
- * 
- * GET /api/reports/export/:format
- * Query params: same as generateReport
- * Path param: format (pdf | xlsx)
- * 
- * Requirements: 11.2, 11.3, 11.4
  */
 export async function exportReport(
   req: Request,
@@ -143,43 +98,23 @@ export async function exportReport(
       throw new AppError(400, 'INVALID_FORMAT', 'Format must be either "pdf" or "xlsx"');
     }
 
-    // Validate query parameters
     const parsed = ReportFiltersSchema.safeParse(req.query);
     if (!parsed.success) {
       throw new AppError(400, 'INVALID_FILTERS', 'Invalid report filters', parsed.error.errors);
     }
 
-    // Build filters
     const filters: ReportFilters = {};
 
-    if (parsed.data.examCycle) {
-      filters.examCycle = parsed.data.examCycle;
-    }
+    if (parsed.data.examCycle) filters.examCycle = parsed.data.examCycle;
+    if (parsed.data.startDate) filters.startDate = new Date(parsed.data.startDate);
+    if (parsed.data.endDate) filters.endDate = new Date(parsed.data.endDate);
+    if (parsed.data.regionId) filters.regionId = parsed.data.regionId;
+    if (parsed.data.examCenterId) filters.examCenterId = parsed.data.examCenterId;
+    if (parsed.data.incidentTypeId) filters.incidentTypeId = parsed.data.incidentTypeId;
+    if (parsed.data.assignedUserId) filters.assignedUserId = parsed.data.assignedUserId;
 
-    if (parsed.data.startDate) {
-      filters.startDate = new Date(parsed.data.startDate);
-    }
-
-    if (parsed.data.endDate) {
-      filters.endDate = new Date(parsed.data.endDate);
-    }
-
-    if (parsed.data.examFieldId) {
-      filters.examFieldId = parsed.data.examFieldId;
-    }
-
-    if (parsed.data.incidentTypeId) {
-      filters.incidentTypeId = parsed.data.incidentTypeId;
-    }
-
-    if (parsed.data.orgId) {
-      filters.orgId = parsed.data.orgId;
-    }
-
-    // Generate report data
     const reportData = await reportService.generateIncidentReport(filters);
 
-    // Export to requested format
     let buffer: Buffer;
     let contentType: string;
     let filename: string;
@@ -194,12 +129,9 @@ export async function exportReport(
       filename = `incident-report-${Date.now()}.xlsx`;
     }
 
-    // Set response headers
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', buffer.length);
-
-    // Send buffer
     res.send(buffer);
   } catch (err) {
     next(err);
@@ -208,12 +140,6 @@ export async function exportReport(
 
 /**
  * Exports a post-cycle summary in the specified format (pdf or xlsx).
- * 
- * GET /api/reports/export-post-cycle/:format
- * Query params: examCycle, startDate, endDate
- * Path param: format (pdf | xlsx)
- * 
- * Requirements: 11.2, 11.4, 11.5
  */
 export async function exportPostCycleSummary(
   req: Request,
@@ -227,31 +153,19 @@ export async function exportPostCycleSummary(
       throw new AppError(400, 'INVALID_FORMAT', 'Format must be either "pdf" or "xlsx"');
     }
 
-    // Validate query parameters
     const parsed = ReportFiltersSchema.safeParse(req.query);
     if (!parsed.success) {
       throw new AppError(400, 'INVALID_FILTERS', 'Invalid report filters', parsed.error.errors);
     }
 
-    // Build filters
     const filters: ReportFilters = {};
 
-    if (parsed.data.examCycle) {
-      filters.examCycle = parsed.data.examCycle;
-    }
+    if (parsed.data.examCycle) filters.examCycle = parsed.data.examCycle;
+    if (parsed.data.startDate) filters.startDate = new Date(parsed.data.startDate);
+    if (parsed.data.endDate) filters.endDate = new Date(parsed.data.endDate);
 
-    if (parsed.data.startDate) {
-      filters.startDate = new Date(parsed.data.startDate);
-    }
-
-    if (parsed.data.endDate) {
-      filters.endDate = new Date(parsed.data.endDate);
-    }
-
-    // Generate summary
     const summary = await reportService.generatePostCycleSummary(filters);
 
-    // Export to requested format
     let buffer: Buffer;
     let contentType: string;
     let filename: string;
@@ -266,12 +180,9 @@ export async function exportPostCycleSummary(
       filename = `post-cycle-summary-${Date.now()}.xlsx`;
     }
 
-    // Set response headers
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', buffer.length);
-
-    // Send buffer
     res.send(buffer);
   } catch (err) {
     next(err);

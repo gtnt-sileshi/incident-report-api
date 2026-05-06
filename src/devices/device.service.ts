@@ -3,7 +3,7 @@ import { deviceRepository } from './device.repository';
 import { AppError } from '../middleware/errorHandler';
 import { Device, NewDevice } from '../db/schema';
 import { getDb } from '../db/index';
-import { users, examCenterAssignments, examFields } from '../db/schema';
+import { users } from '../db/schema';
 
 export interface RegisterDeviceData {
   deviceId: string;
@@ -11,7 +11,7 @@ export interface RegisterDeviceData {
   isActive?: boolean;
 }
 
-export interface DeviceWithAssignment {
+export interface DeviceWithUser {
   id: string;
   deviceId: string;
   userId: string | null;
@@ -24,11 +24,6 @@ export interface DeviceWithAssignment {
     email: string | null;
     role: string;
   } | null;
-  examFields?: Array<{
-    id: string;
-    name: string;
-    location: string | null;
-  }>;
 }
 
 export class DeviceService {
@@ -36,13 +31,7 @@ export class DeviceService {
     return getDb();
   }
 
-  /**
-   * Registers a new device, enforcing Device_ID uniqueness.
-   * If a userId is provided, links the device to that user.
-   * Requirements: 3.1, 13.4
-   */
   async registerDevice(data: RegisterDeviceData): Promise<Device> {
-    // Enforce Device_ID uniqueness
     const existing = await deviceRepository.findByDeviceId(data.deviceId);
     if (existing) {
       throw new AppError(
@@ -52,7 +41,6 @@ export class DeviceService {
       );
     }
 
-    // If linking to a user, ensure the user doesn't already have a device
     if (data.userId) {
       const existingForUser = await deviceRepository.findByUserId(data.userId);
       if (existingForUser) {
@@ -73,10 +61,6 @@ export class DeviceService {
     return deviceRepository.register(newDevice);
   }
 
-  /**
-   * Deactivates a device by setting is_active = false.
-   * Requirements: 3.7
-   */
   async deactivateDevice(id: string): Promise<Device> {
     const device = await deviceRepository.findById(id);
     if (!device) {
@@ -95,21 +79,14 @@ export class DeviceService {
     return deactivated;
   }
 
-  /**
-   * Lists all devices with their associated user and exam field assignment info.
-   * Requirements: 3.8
-   */
-  async listDevices(includeInactive = false): Promise<DeviceWithAssignment[]> {
+  async listDevices(includeInactive = false): Promise<DeviceWithUser[]> {
     const allDevices = await deviceRepository.findAll(includeInactive);
 
-    // Enrich each device with user info and exam field assignments
     const enriched = await Promise.all(
       allDevices.map(async (device) => {
-        let user: DeviceWithAssignment['user'] = null;
-        let assignedExamFields: DeviceWithAssignment['examFields'] = [];
+        let user: DeviceWithUser['user'] = null;
 
         if (device.userId) {
-          // Fetch user info
           const userRows = await this.db
             .select({
               id: users.id,
@@ -122,19 +99,6 @@ export class DeviceService {
             .limit(1);
 
           user = userRows[0] ?? null;
-
-          // Fetch exam field assignments for this user
-          const assignmentRows = await this.db
-            .select({
-              id: examFields.id,
-              name: examFields.name,
-              location: examFields.location,
-            })
-            .from(examCenterAssignments)
-            .innerJoin(examFields, eq(examCenterAssignments.examFieldId, examFields.id))
-            .where(eq(examCenterAssignments.userId, device.userId));
-
-          assignedExamFields = assignmentRows;
         }
 
         return {
@@ -145,7 +109,6 @@ export class DeviceService {
           registeredAt: device.registeredAt,
           lastSeenAt: device.lastSeenAt,
           user,
-          examFields: assignedExamFields,
         };
       }),
     );
@@ -153,18 +116,13 @@ export class DeviceService {
     return enriched;
   }
 
-  /**
-   * Fetches a single device by its primary key UUID.
-   * Requirements: 3.8
-   */
-  async getDevice(id: string): Promise<DeviceWithAssignment> {
+  async getDevice(id: string): Promise<DeviceWithUser> {
     const device = await deviceRepository.findById(id);
     if (!device) {
       throw new AppError(404, 'DEVICE_NOT_FOUND', `Device ${id} not found`);
     }
 
-    let user: DeviceWithAssignment['user'] = null;
-    let assignedExamFields: DeviceWithAssignment['examFields'] = [];
+    let user: DeviceWithUser['user'] = null;
 
     if (device.userId) {
       const userRows = await this.db
@@ -179,18 +137,6 @@ export class DeviceService {
         .limit(1);
 
       user = userRows[0] ?? null;
-
-      const assignmentRows = await this.db
-        .select({
-          id: examFields.id,
-          name: examFields.name,
-          location: examFields.location,
-        })
-        .from(examCenterAssignments)
-        .innerJoin(examFields, eq(examCenterAssignments.examFieldId, examFields.id))
-        .where(eq(examCenterAssignments.userId, device.userId));
-
-      assignedExamFields = assignmentRows;
     }
 
     return {
@@ -201,7 +147,6 @@ export class DeviceService {
       registeredAt: device.registeredAt,
       lastSeenAt: device.lastSeenAt,
       user,
-      examFields: assignedExamFields,
     };
   }
 }

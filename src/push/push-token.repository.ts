@@ -68,19 +68,18 @@ export class PushTokenRepository {
   }
 
   /**
-   * Returns all tokens for all users in an organization.
+   * Returns all tokens for all users in a region.
    * Requirements: 14.1, 14.2
    */
-  async getTokensForOrg(orgId: string): Promise<PushToken[]> {
-    // Join users to get all tokens for all users in an org
-    const orgUsers = await this.db
+  async getTokensForRegion(regionId: string): Promise<PushToken[]> {
+    const regionUsers = await this.db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.orgId, orgId));
+      .where(eq(users.regionId, regionId));
 
-    if (orgUsers.length === 0) return [];
+    if (regionUsers.length === 0) return [];
 
-    const userIds = orgUsers.map((u) => u.id);
+    const userIds = regionUsers.map((u) => u.id);
     return this.getTokensForUsers(userIds);
   }
 
@@ -110,8 +109,8 @@ export class PushTokenRepository {
     return this.getTokensForUser(userId);
   }
 
-  async findByOrg(orgId: string): Promise<PushToken[]> {
-    return this.getTokensForOrg(orgId);
+  async findByRegion(regionId: string): Promise<PushToken[]> {
+    return this.getTokensForRegion(regionId);
   }
 
   async findByUsers(userIds: string[]): Promise<PushToken[]> {

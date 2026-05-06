@@ -4,16 +4,8 @@ import { ReportData, PostCycleSummary } from './report.service';
 
 /**
  * Export service for generating PDF and XLSX reports.
- * 
- * Requirements: 11.2, 11.4
- * Both exports must complete within 30 seconds for 12-month datasets.
  */
 export class ExportService {
-  /**
-   * Exports report data to PDF format using pdfkit.
-   * 
-   * Requirements: 11.2, 11.4
-   */
   async exportPDF(reportData: ReportData): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
@@ -44,14 +36,14 @@ export class ExportService {
           if (reportData.filters.endDate) {
             doc.text(`End Date: ${reportData.filters.endDate.toLocaleDateString()}`);
           }
-          if (reportData.filters.examFieldId) {
-            doc.text(`Exam Field ID: ${reportData.filters.examFieldId}`);
+          if (reportData.filters.examCenterId) {
+            doc.text(`Exam Center ID: ${reportData.filters.examCenterId}`);
           }
           if (reportData.filters.incidentTypeId) {
             doc.text(`Incident Type ID: ${reportData.filters.incidentTypeId}`);
           }
-          if (reportData.filters.orgId) {
-            doc.text(`Organization ID: ${reportData.filters.orgId}`);
+          if (reportData.filters.regionId) {
+            doc.text(`Region ID: ${reportData.filters.regionId}`);
           }
           doc.moveDown();
         }
@@ -71,17 +63,16 @@ export class ExportService {
         doc.text(`High Priority Incidents: ${reportData.summary.highPriorityCount}`);
         doc.moveDown();
 
-        // Metrics by Type and Organization
-        doc.fontSize(14).text('Metrics by Incident Type and Organization', { underline: true });
+        // Metrics by Type and Region
+        doc.fontSize(14).text('Metrics by Incident Type and Region', { underline: true });
         doc.fontSize(9);
 
         if (reportData.metrics.length > 0) {
-          // Table headers
           const tableTop = doc.y;
           const colWidths = [120, 100, 60, 60, 80, 80];
           const headers = [
             'Incident Type',
-            'Organization',
+            'Region',
             'Total',
             'Resolved',
             'Avg Time (min)',
@@ -96,7 +87,6 @@ export class ExportService {
 
           doc.moveDown(0.5);
 
-          // Table rows
           reportData.metrics.forEach((metric) => {
             if (doc.y > 700) {
               doc.addPage();
@@ -111,7 +101,7 @@ export class ExportService {
             });
             x += colWidths[0];
 
-            doc.text(metric.orgName ?? 'N/A', x, rowY, { width: colWidths[1], continued: false });
+            doc.text(metric.regionName ?? 'N/A', x, rowY, { width: colWidths[1], continued: false });
             x += colWidths[1];
 
             doc.text(metric.totalIncidents.toString(), x, rowY, {
@@ -149,18 +139,18 @@ export class ExportService {
 
         doc.moveDown();
 
-        // Disruption by Exam Field
+        // Disruption by Exam Center
         if (doc.y > 650) {
           doc.addPage();
         }
 
-        doc.fontSize(14).text('Disruption by Exam Field', { underline: true });
+        doc.fontSize(14).text('Disruption by Exam Center', { underline: true });
         doc.fontSize(9);
 
         if (reportData.disruption.length > 0) {
           const tableTop = doc.y;
           const colWidths = [150, 80, 100, 80];
-          const headers = ['Exam Field', 'Total', 'Avg Disruption (min)', 'High Priority'];
+          const headers = ['Exam Center', 'Total', 'Avg Disruption (min)', 'High Priority'];
 
           let x = 50;
           headers.forEach((header, i) => {
@@ -170,7 +160,7 @@ export class ExportService {
 
           doc.moveDown(0.5);
 
-          reportData.disruption.forEach((field) => {
+          reportData.disruption.forEach((center) => {
             if (doc.y > 700) {
               doc.addPage();
             }
@@ -178,18 +168,18 @@ export class ExportService {
             x = 50;
             const rowY = doc.y;
 
-            doc.text(field.examFieldName, x, rowY, { width: colWidths[0], continued: false });
+            doc.text(center.examCenterName, x, rowY, { width: colWidths[0], continued: false });
             x += colWidths[0];
 
-            doc.text(field.totalIncidents.toString(), x, rowY, {
+            doc.text(center.totalIncidents.toString(), x, rowY, {
               width: colWidths[1],
               continued: false,
             });
             x += colWidths[1];
 
             doc.text(
-              field.avgDisruptionMinutes
-                ? Math.round(field.avgDisruptionMinutes).toString()
+              center.avgDisruptionMinutes
+                ? Math.round(center.avgDisruptionMinutes).toString()
                 : 'N/A',
               x,
               rowY,
@@ -197,7 +187,7 @@ export class ExportService {
             );
             x += colWidths[2];
 
-            doc.text(field.highPriorityCount.toString(), x, rowY, {
+            doc.text(center.highPriorityCount.toString(), x, rowY, {
               width: colWidths[3],
               continued: false,
             });
@@ -216,11 +206,6 @@ export class ExportService {
     });
   }
 
-  /**
-   * Exports report data to XLSX format using exceljs.
-   * 
-   * Requirements: 11.2, 11.4
-   */
   async exportXLSX(reportData: ReportData): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
 
@@ -261,8 +246,8 @@ export class ExportService {
           value: reportData.filters.endDate.toLocaleDateString(),
         });
       }
-      if (reportData.filters.examFieldId) {
-        summarySheet.addRow({ metric: 'Exam Field ID', value: reportData.filters.examFieldId });
+      if (reportData.filters.examCenterId) {
+        summarySheet.addRow({ metric: 'Exam Center ID', value: reportData.filters.examCenterId });
       }
       if (reportData.filters.incidentTypeId) {
         summarySheet.addRow({
@@ -270,8 +255,8 @@ export class ExportService {
           value: reportData.filters.incidentTypeId,
         });
       }
-      if (reportData.filters.orgId) {
-        summarySheet.addRow({ metric: 'Organization ID', value: reportData.filters.orgId });
+      if (reportData.filters.regionId) {
+        summarySheet.addRow({ metric: 'Region ID', value: reportData.filters.regionId });
       }
     }
 
@@ -279,10 +264,10 @@ export class ExportService {
     summarySheet.getRow(1).font = { bold: true };
 
     // Metrics sheet
-    const metricsSheet = workbook.addWorksheet('Metrics by Type & Org');
+    const metricsSheet = workbook.addWorksheet('Metrics by Type & Region');
     metricsSheet.columns = [
       { header: 'Incident Type', key: 'incidentTypeName', width: 30 },
-      { header: 'Organization', key: 'orgName', width: 25 },
+      { header: 'Region', key: 'regionName', width: 25 },
       { header: 'Total Incidents', key: 'totalIncidents', width: 15 },
       { header: 'Resolved', key: 'resolvedIncidents', width: 15 },
       { header: 'Avg Time (min)', key: 'avgTimeToResolveMinutes', width: 15 },
@@ -292,7 +277,7 @@ export class ExportService {
     reportData.metrics.forEach((metric) => {
       metricsSheet.addRow({
         incidentTypeName: metric.incidentTypeName,
-        orgName: metric.orgName ?? 'N/A',
+        regionName: metric.regionName ?? 'N/A',
         totalIncidents: metric.totalIncidents,
         resolvedIncidents: metric.resolvedIncidents,
         avgTimeToResolveMinutes: metric.avgTimeToResolveMinutes
@@ -305,22 +290,22 @@ export class ExportService {
     metricsSheet.getRow(1).font = { bold: true };
 
     // Disruption sheet
-    const disruptionSheet = workbook.addWorksheet('Disruption by Field');
+    const disruptionSheet = workbook.addWorksheet('Disruption by Center');
     disruptionSheet.columns = [
-      { header: 'Exam Field', key: 'examFieldName', width: 30 },
+      { header: 'Exam Center', key: 'examCenterName', width: 30 },
       { header: 'Total Incidents', key: 'totalIncidents', width: 15 },
       { header: 'Avg Disruption (min)', key: 'avgDisruptionMinutes', width: 20 },
       { header: 'High Priority Count', key: 'highPriorityCount', width: 20 },
     ];
 
-    reportData.disruption.forEach((field) => {
+    reportData.disruption.forEach((center) => {
       disruptionSheet.addRow({
-        examFieldName: field.examFieldName,
-        totalIncidents: field.totalIncidents,
-        avgDisruptionMinutes: field.avgDisruptionMinutes
-          ? Math.round(field.avgDisruptionMinutes)
+        examCenterName: center.examCenterName,
+        totalIncidents: center.totalIncidents,
+        avgDisruptionMinutes: center.avgDisruptionMinutes
+          ? Math.round(center.avgDisruptionMinutes)
           : 'N/A',
-        highPriorityCount: field.highPriorityCount,
+        highPriorityCount: center.highPriorityCount,
       });
     });
 
@@ -331,9 +316,6 @@ export class ExportService {
     return Buffer.from(buffer);
   }
 
-  /**
-   * Exports post-cycle summary to PDF format.
-   */
   async exportPostCycleSummaryPDF(summary: PostCycleSummary): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
@@ -360,14 +342,14 @@ export class ExportService {
         );
         doc.moveDown();
 
-        // Incidents per field
-        doc.fontSize(14).text('Incidents per Exam Field', { underline: true });
+        // Incidents per center
+        doc.fontSize(14).text('Incidents per Exam Center', { underline: true });
         doc.fontSize(9);
 
-        if (summary.incidentsPerField.length > 0) {
+        if (summary.incidentsPerCenter.length > 0) {
           const tableTop = doc.y;
           const colWidths = [300, 100];
-          const headers = ['Exam Field', 'Incident Count'];
+          const headers = ['Exam Center', 'Incident Count'];
 
           let x = 50;
           headers.forEach((header, i) => {
@@ -377,7 +359,7 @@ export class ExportService {
 
           doc.moveDown(0.5);
 
-          summary.incidentsPerField.forEach((field) => {
+          summary.incidentsPerCenter.forEach((center) => {
             if (doc.y > 700) {
               doc.addPage();
             }
@@ -385,10 +367,10 @@ export class ExportService {
             x = 50;
             const rowY = doc.y;
 
-            doc.text(field.examFieldName, x, rowY, { width: colWidths[0], continued: false });
+            doc.text(center.examCenterName, x, rowY, { width: colWidths[0], continued: false });
             x += colWidths[0];
 
-            doc.text(field.incidentCount.toString(), x, rowY, {
+            doc.text(center.incidentCount.toString(), x, rowY, {
               width: colWidths[1],
               continued: false,
             });
@@ -412,7 +394,7 @@ export class ExportService {
         if (summary.recurringProblems.length > 0) {
           const tableTop = doc.y;
           const colWidths = [120, 120, 60];
-          const headers = ['Incident Type', 'Exam Field', 'Frequency'];
+          const headers = ['Incident Type', 'Exam Center', 'Frequency'];
 
           let x = 50;
           headers.forEach((header, i) => {
@@ -433,7 +415,7 @@ export class ExportService {
             doc.text(problem.incidentTypeName, x, rowY, { width: colWidths[0], continued: false });
             x += colWidths[0];
 
-            doc.text(problem.examFieldName, x, rowY, { width: colWidths[1], continued: false });
+            doc.text(problem.examCenterName, x, rowY, { width: colWidths[1], continued: false });
             x += colWidths[1];
 
             doc.text(problem.frequency.toString(), x, rowY, {
@@ -455,9 +437,6 @@ export class ExportService {
     });
   }
 
-  /**
-   * Exports post-cycle summary to XLSX format.
-   */
   async exportPostCycleSummaryXLSX(summary: PostCycleSummary): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
 
@@ -479,34 +458,34 @@ export class ExportService {
 
     summarySheet.getRow(1).font = { bold: true };
 
-    // Incidents per field sheet
-    const fieldSheet = workbook.addWorksheet('Incidents per Field');
-    fieldSheet.columns = [
-      { header: 'Exam Field', key: 'examFieldName', width: 30 },
+    // Incidents per center sheet
+    const centerSheet = workbook.addWorksheet('Incidents per Center');
+    centerSheet.columns = [
+      { header: 'Exam Center', key: 'examCenterName', width: 30 },
       { header: 'Incident Count', key: 'incidentCount', width: 15 },
     ];
 
-    summary.incidentsPerField.forEach((field) => {
-      fieldSheet.addRow({
-        examFieldName: field.examFieldName,
-        incidentCount: field.incidentCount,
+    summary.incidentsPerCenter.forEach((center) => {
+      centerSheet.addRow({
+        examCenterName: center.examCenterName,
+        incidentCount: center.incidentCount,
       });
     });
 
-    fieldSheet.getRow(1).font = { bold: true };
+    centerSheet.getRow(1).font = { bold: true };
 
     // Recurring problems sheet
     const problemsSheet = workbook.addWorksheet('Recurring Problems');
     problemsSheet.columns = [
       { header: 'Incident Type', key: 'incidentTypeName', width: 30 },
-      { header: 'Exam Field', key: 'examFieldName', width: 30 },
+      { header: 'Exam Center', key: 'examCenterName', width: 30 },
       { header: 'Frequency', key: 'frequency', width: 15 },
     ];
 
     summary.recurringProblems.forEach((problem) => {
       problemsSheet.addRow({
         incidentTypeName: problem.incidentTypeName,
-        examFieldName: problem.examFieldName,
+        examCenterName: problem.examCenterName,
         frequency: problem.frequency,
       });
     });

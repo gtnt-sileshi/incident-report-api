@@ -3,7 +3,6 @@ import { getDb } from '../db/index';
 import {
   incidentTypes,
   incidents,
-  routingRules,
   IncidentType,
   NewIncidentType,
 } from '../db/schema';
@@ -52,7 +51,7 @@ export class IncidentTypeRepository {
   async update(id: string, data: Partial<NewIncidentType>): Promise<IncidentType | null> {
     const rows = await this.db
       .update(incidentTypes)
-      .set({ ...data, updatedAt: new Date() })
+      .set(data)
       .where(eq(incidentTypes.id, id))
       .returning();
     return rows[0] ?? null;
@@ -61,27 +60,22 @@ export class IncidentTypeRepository {
   async setActive(id: string, isActive: boolean): Promise<IncidentType | null> {
     const rows = await this.db
       .update(incidentTypes)
-      .set({ isActive, updatedAt: new Date() })
+      .set({ isActive })
       .where(eq(incidentTypes.id, id))
       .returning();
     return rows[0] ?? null;
   }
 
-  async countReferences(id: string): Promise<{ incidents: number; routingRules: number }> {
-    const [incidentCount, routingRuleCount] = await Promise.all([
+  async countReferences(id: string): Promise<{ incidents: number }> {
+    const [incidentCount] = await Promise.all([
       this.db
         .select({ value: count() })
         .from(incidents)
         .where(eq(incidents.incidentTypeId, id)),
-      this.db
-        .select({ value: count() })
-        .from(routingRules)
-        .where(eq(routingRules.incidentTypeId, id)),
     ]);
 
     return {
       incidents: incidentCount[0]?.value ?? 0,
-      routingRules: routingRuleCount[0]?.value ?? 0,
     };
   }
 }

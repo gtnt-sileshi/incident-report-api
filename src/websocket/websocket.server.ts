@@ -11,7 +11,7 @@ import type Redis from 'ioredis';
  * Responsibilities:
  * 1. Upgrade HTTP connections to WebSocket
  * 2. Authenticate via JWT (query param or Authorization header)
- * 3. Subscribe each connection to a Redis pub/sub channel scoped to the user's org
+ * 3. Subscribe each connection to a Redis pub/sub channel scoped to the user's region
  * 4. Broadcast events: incident.created, incident.status_changed, incident.assigned,
  *    incident.escalated, notification.new
  *
@@ -22,7 +22,7 @@ import type Redis from 'ioredis';
 
 interface AuthenticatedWebSocket extends WebSocket {
   userId: string;
-  orgId: string;
+  regionId: string | null;
   role: string;
   isAlive: boolean;
 }
@@ -37,7 +37,7 @@ interface WebSocketEvent {
 export class WebSocketServerManager {
   private wss: WebSocketServer | null = null;
   private redisSubscriber: Redis | null = null;
-  private orgChannelMap: Map<string, Set<AuthenticatedWebSocket>> = new Map();
+  private regionChannelMap: Map<string, Set<AuthenticatedWebSocket>> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
 
   /**
@@ -130,12 +130,12 @@ export class WebSocketServerManager {
   private handleConnection(ws: AuthenticatedWebSocket, payload: JwtPayload): void {
     // Attach user info to the WebSocket
     ws.userId = payload.sub;
-    ws.orgId = payload.orgId;
+    ws.regionId = payload.regionId ?? null;
     ws.role = payload.role;
     ws.isAlive = true;
 
-    // Subscribe to the user's org channel
-    this.subscribeToOrgChannel(ws);
+    // Subscribe to the user's region channel
+    this.subscribeToRegionChannel(ws);
 
     // Handle pong responses for heartbeat
     ws.on('pong', () => {
@@ -144,44 +144,44 @@ export class WebSocketServerManager {
 
     // Handle connection close
     ws.on('close', () => {
-      this.unsubscribeFromOrgChannel(ws);
+      this.unsubscribeFromRegionChannel(ws);
     });
 
     // Handle errors
     ws.on('error', (err) => {
       console.error('[WebSocket] Connection error:', err);
-      this.unsubscribeFromOrgChannel(ws);
+      this.unsubscribeFromRegionChannel(ws);
     });
 
-    console.info(`[WebSocket] Client connected: userId=${ws.userId}, orgId=${ws.orgId}`);
+    console.info(`[WebSocket] Client connected: userId=${ws.userId}, regionId=${ws.regionId}`);
   }
 
   /**
-   * Subscribes a WebSocket connection to its org's Redis pub/sub channel.
+   * Subscribes a WebSocket connection to its region's Redis pub/sub channel.
    */
-  private subscribeToOrgChannel(ws: AuthenticatedWebSocket): void {
-    const channel = `org:${ws.orgId}`;
+  private subscribeToRegionChannel(ws: AuthenticatedWebSocket): void {
+    const channel = `region:${ws.regionId ?? 'global'}`;
 
-    // Add to the org channel map
-    if (!this.orgChannelMap.has(channel)) {
-      this.orgChannelMap.set(channel, new Set());
+    // Add to the region channel map
+    if (!this.regionChannelMap.has(channel)) {
+      this.regionChannelMap.set(channel, new Set());
     }
-    this.orgChannelMap.get(channel)!.add(ws);
+    this.regionChannelMap.get(channel)!.add(ws);
 
     console.info(`[WebSocket] Subscribed userId=${ws.userId} to channel=${channel}`);
   }
 
   /**
-   * Unsubscribes a WebSocket connection from its org's Redis pub/sub channel.
+   * Unsubscribes a WebSocket connection from its region's Redis pub/sub channel.
    */
-  private unsubscribeFromOrgChannel(ws: AuthenticatedWebSocket): void {
-    const channel = `org:${ws.orgId}`;
+  private unsubscribeFromRegionChannel(ws: AuthenticatedWebSocket): void {
+    const channel = `region:${ws.regionId ?? 'global'}`;
 
-    const clients = this.orgChannelMap.get(channel);
+    const clients = this.regionChannelMap.get(channel);
     if (clients) {
       clients.delete(ws);
       if (clients.size === 0) {
-        this.orgChannelMap.delete(channel);
+        this.regionChannelMap.delete(channel);
       }
     }
 
@@ -195,8 +195,8 @@ export class WebSocketServerManager {
     // Create a separate Redis client for pub/sub (ioredis requirement)
     this.redisSubscriber = getRedis().duplicate();
 
-    // Subscribe to all org channels using pattern matching
-    this.redisSubscriber.psubscribe('org:*', (err, count) => {
+    // Subscribe to all region channels using pattern matching
+    this.redisSubscriber.psubscribe('region:*', (err, count) => {
       if (err) {
         console.error('[WebSocket] Redis psubscribe failed:', err);
         return;
@@ -223,12 +223,12 @@ export class WebSocketServerManager {
       const event: WebSocketEvent = JSON.parse(message);
 
       // Get all WebSocket clients subscribed to this channel
-      const clients = this.orgChannelMap.get(channel);
+      const clients = this.regionChannelMap.get(channel);
       if (!clients || clients.size === 0) {
         return;
       }
 
-      // Broadcast to all connected clients in this org
+      // Broadcast to all connected clients in this region
       const payload = JSON.stringify(event);
       clients.forEach((ws) => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -290,7 +290,7 @@ export class WebSocketServerManager {
     }
 
     // Clear channel map
-    this.orgChannelMap.clear();
+    this.regionChannelMap.clear();
 
     console.info('[WebSocket] Shutdown complete');
   }

@@ -12,11 +12,6 @@ import { commentRepository } from './comment.repository';
 import { attachmentRepository } from './attachment.repository';
 import { auditLogRepository } from '../audit/audit-log.repository';
 
-/**
- * GET /api/incidents
- * Lists incidents, scoped by role.
- * Requirements: 1.3, 8.1, 9.1
- */
 export async function listIncidents(
   req: Request,
   res: Response,
@@ -25,18 +20,18 @@ export async function listIncidents(
   try {
     const user = req.user!;
     const filters = {
-      status:          req.query.status as string | undefined,
-      priority:        req.query.priority as string | undefined,
-      examFieldId:     req.query.examFieldId as string | undefined,
-      incidentTypeId:  req.query.incidentTypeId as string | undefined,
-      assignedOrgId:   req.query.assignedOrgId as string | undefined,
-      assignedUserId:  req.query.assignedUserId as string | undefined,
+      status:            req.query.status as string | undefined,
+      priority:          req.query.priority as string | undefined,
+      regionId:          req.query.regionId as string | undefined,
+      examCenterId:      req.query.examCenterId as string | undefined,
+      examRoomId:        req.query.examRoomId as string | undefined,
+      powerClusterId:    req.query.powerClusterId as string | undefined,
+      internetClusterId: req.query.internetClusterId as string | undefined,
+      incidentTypeId:    req.query.incidentTypeId as string | undefined,
+      assignedUserId:    req.query.assignedUserId as string | undefined,
     };
 
-    const incidents = await incidentService.listIncidents(
-      { sub: user.sub, role: user.role, orgId: user.orgId },
-      filters,
-    );
+    const incidents = await incidentService.listIncidents(user, filters);
 
     res.json({ data: incidents });
   } catch (err) {
@@ -44,11 +39,6 @@ export async function listIncidents(
   }
 }
 
-/**
- * POST /api/incidents
- * Creates a new incident.
- * Requirements: 6.1, 17.2, 17.4
- */
 export async function createIncident(
   req: Request,
   res: Response,
@@ -58,11 +48,7 @@ export async function createIncident(
     const user = req.user!;
     const data = CreateIncidentSchema.parse(req.body);
 
-    const incident = await incidentService.createIncident(data, {
-      sub:   user.sub,
-      role:  user.role,
-      orgId: user.orgId,
-    });
+    const incident = await incidentService.createIncident(data, user);
 
     res.status(201).json({ data: incident });
   } catch (err) {
@@ -70,11 +56,6 @@ export async function createIncident(
   }
 }
 
-/**
- * GET /api/incidents/:id
- * Gets a single incident by ID, including comments, attachments, and audit log.
- * Requirements: 1.3, 9.1
- */
 export async function getIncident(
   req: Request,
   res: Response,
@@ -84,11 +65,7 @@ export async function getIncident(
     const user = req.user!;
     const { id } = req.params;
 
-    const incident = await incidentService.getIncident(id, {
-      sub:   user.sub,
-      role:  user.role,
-      orgId: user.orgId,
-    });
+    const incident = await incidentService.getIncident(id, user);
 
     // Fetch related data in parallel
     const [comments, attachments, auditEntries] = await Promise.all([
@@ -139,11 +116,6 @@ export async function getIncident(
   }
 }
 
-/**
- * PATCH /api/incidents/:id/status
- * Updates the status of an incident.
- * Requirements: 6.2, 6.3, 6.4, 6.5, 6.6
- */
 export async function updateStatus(
   req: Request,
   res: Response,
@@ -157,7 +129,7 @@ export async function updateStatus(
     const incident = await incidentService.updateStatus(
       id,
       status,
-      { sub: user.sub, role: user.role, orgId: user.orgId },
+      user,
       resolutionSummary,
     );
 
@@ -167,11 +139,6 @@ export async function updateStatus(
   }
 }
 
-/**
- * PATCH /api/incidents/:id/assign
- * Assigns or reassigns an incident.
- * Requirements: 7.1, 7.2, 7.3, 7.5, 7.6
- */
 export async function assignIncident(
   req: Request,
   res: Response,
@@ -182,11 +149,7 @@ export async function assignIncident(
     const { id } = req.params;
     const data = AssignIncidentSchema.parse(req.body);
 
-    const incident = await incidentService.assignIncident(
-      id,
-      data,
-      { sub: user.sub, role: user.role, orgId: user.orgId },
-    );
+    const incident = await incidentService.assignIncident(id, data, user);
 
     res.json({ data: incident });
   } catch (err) {
@@ -194,11 +157,6 @@ export async function assignIncident(
   }
 }
 
-/**
- * POST /api/incidents/:id/comments
- * Adds a comment to an incident.
- * Requirements: 8.5
- */
 export async function addComment(
   req: Request,
   res: Response,
@@ -209,11 +167,7 @@ export async function addComment(
     const { id } = req.params;
     const { content } = AddCommentSchema.parse(req.body);
 
-    const comment = await incidentService.addComment(
-      id,
-      content,
-      { sub: user.sub, role: user.role, orgId: user.orgId },
-    );
+    const comment = await incidentService.addComment(id, content, user);
 
     res.status(201).json({ data: comment });
   } catch (err) {
@@ -221,11 +175,6 @@ export async function addComment(
   }
 }
 
-/**
- * POST /api/incidents/:id/escalate
- * Escalates an incident to a specified organization.
- * Requirements: 7.7, 7.8, 7.9
- */
 export async function escalateIncident(
   req: Request,
   res: Response,
@@ -234,13 +183,9 @@ export async function escalateIncident(
   try {
     const user = req.user!;
     const { id } = req.params;
-    const { orgId } = EscalateIncidentSchema.parse(req.body);
+    EscalateIncidentSchema.parse(req.body);
 
-    const incident = await incidentService.escalateIncident(
-      id,
-      orgId,
-      { sub: user.sub, role: user.role, orgId: user.orgId },
-    );
+    const incident = await incidentService.escalateIncident(id, user);
 
     res.json({ data: incident });
   } catch (err) {
@@ -248,12 +193,6 @@ export async function escalateIncident(
   }
 }
 
-/**
- * POST /api/incidents/:id/sms-alert
- * Stub for triggering an SMS alert for an incident.
- * Full implementation in task 14.
- * Requirements: 12.6
- */
 export async function triggerSmsAlert(
   req: Request,
   res: Response,
@@ -262,7 +201,6 @@ export async function triggerSmsAlert(
   try {
     const { id } = req.params;
 
-    // Stub: SMS service will be implemented in task 14
     res.json({
       data: {
         incidentId: id,
@@ -274,11 +212,6 @@ export async function triggerSmsAlert(
   }
 }
 
-/**
- * POST /api/incidents/:id/attachments
- * Upload attachments to an incident.
- * Requirements: 5.3, 8.4, 8.5
- */
 export async function uploadAttachments(
   req: Request,
   res: Response,
@@ -288,7 +221,6 @@ export async function uploadAttachments(
     const user = req.user!;
     const { id } = req.params;
 
-    // Multer attaches files to req.files
     const files = req.files as Express.Multer.File[];
 
     if (!files || files.length === 0) {
@@ -301,7 +233,6 @@ export async function uploadAttachments(
       return;
     }
 
-    // Map multer files to the format expected by the service
     const fileInfos = files.map((file) => ({
       path: file.path,
       originalname: file.originalname,
@@ -312,7 +243,7 @@ export async function uploadAttachments(
     const attachments = await attachmentService.createAttachments(
       id,
       fileInfos,
-      { sub: user.sub, role: user.role, orgId: user.orgId },
+      user,
     );
 
     res.status(201).json({ data: attachments });

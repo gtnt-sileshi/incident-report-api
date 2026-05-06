@@ -1,6 +1,5 @@
 import bcrypt from 'bcryptjs';
 import { userRepository } from './user.repository';
-import { organizationRepository } from '../organizations/organization.repository';
 import { deviceRepository } from '../devices/device.repository';
 import { jwtService } from '../auth/jwt.service';
 import { qrCredentialRepository } from '../qr/qr-credential.repository';
@@ -9,13 +8,17 @@ import { User, NewUser, Device } from '../db/schema';
 import { JwtPayload } from '../auth/jwt.service';
 
 export interface CreateUserData {
-  orgId: string;
   name: string;
   email?: string;
   password?: string;
   role: string;
   phoneNumber?: string;
   deviceId?: string; // required for IT_Rep role
+  regionId?: string;
+  examCenterId?: string;
+  examRoomId?: string;
+  powerClusterId?: string;
+  internetClusterId?: string;
 }
 
 export interface UpdateUserData {
@@ -28,27 +31,11 @@ export interface UpdateUserData {
 }
 
 export interface UserWithDevice extends Omit<User, 'passwordHash'> {
-  orgName?: string;
   device: Pick<Device, 'id' | 'deviceId' | 'isActive' | 'registeredAt' | 'lastSeenAt'> | null;
 }
 
 export class UserService {
-  /**
-   * Creates a new user.
-   * - If role = 'it_rep', enforces Device_ID uniqueness (no other active IT_Rep
-   *   may have the same deviceId).
-   * - Hashes the password with bcrypt before storing.
-   * - Auto-issues a QR credential stub for IT_Rep (full QR service in task 13).
-   * Requirements: 13.1, 13.2, 13.3, 13.4
-   */
   async createUser(data: CreateUserData): Promise<User> {
-    // Validate org exists
-    const org = await organizationRepository.findById(data.orgId);
-    if (!org) {
-      throw new AppError(404, 'ORG_NOT_FOUND', `Organization ${data.orgId} not found`);
-    }
-
-    // Check email uniqueness if provided
     if (data.email) {
       const existing = await userRepository.findByEmail(data.email);
       if (existing) {
@@ -56,7 +43,6 @@ export class UserService {
       }
     }
 
-    // IT_Rep-specific validation
     if (data.role === 'it_rep') {
       if (!data.deviceId) {
         throw new AppError(
@@ -66,10 +52,8 @@ export class UserService {
         );
       }
 
-      // Enforce Device_ID uniqueness: no other active IT_Rep may have the same deviceId
       const existingDevice = await deviceRepository.findByDeviceId(data.deviceId);
       if (existingDevice && existingDevice.isActive) {
-        // Check if the device is linked to an active IT_Rep user
         if (existingDevice.userId) {
           const linkedUser = await userRepository.findById(existingDevice.userId);
           if (linkedUser && linkedUser.isActive && linkedUser.role === 'it_rep') {
@@ -83,28 +67,28 @@ export class UserService {
       }
     }
 
-    // Hash password if provided
     let passwordHash: string | undefined;
     if (data.password) {
       passwordHash = await bcrypt.hash(data.password, 12);
     }
 
-    // Build the new user record
     const newUser: NewUser = {
-      orgId: data.orgId,
       name: data.name,
       email: data.email,
       passwordHash,
       role: data.role,
       phoneNumber: data.phoneNumber,
+      regionId: data.regionId,
+      examCenterId: data.examCenterId,
+      examRoomId: data.examRoomId,
+      powerClusterId: data.powerClusterId,
+      internetClusterId: data.internetClusterId,
       isActive: true,
     };
 
     const user = await userRepository.create(newUser);
 
-    // If IT_Rep, register the device and stub QR credential issuance
     if (data.role === 'it_rep' && data.deviceId) {
-      // Register the device linked to this user
       const existingDevice = await deviceRepository.findByDeviceId(data.deviceId);
       if (!existingDevice) {
         await deviceRepository.register({
@@ -113,27 +97,17 @@ export class UserService {
           isActive: true,
         });
       }
-
-      // Stub: QR credential auto-issuance noted here.
-      // Full QR credential generation (ECDSA signing) is implemented in task 13.
-      // For now, we record a placeholder credential so the user record is complete.
-      // TODO (task 13): replace stub with real QrService.issueCredential(user)
     }
 
     return user;
   }
 
-  /**
-   * Updates an existing user's fields.
-   * Requirements: 13.1, 13.2
-   */
   async updateUser(id: string, data: UpdateUserData): Promise<User> {
     const user = await userRepository.findById(id);
     if (!user) {
       throw new AppError(404, 'USER_NOT_FOUND', `User ${id} not found`);
     }
 
-    // Check email uniqueness if changing email
     if (data.email && data.email !== user.email) {
       const existing = await userRepository.findByEmail(data.email);
       if (existing && existing.id !== id) {
@@ -141,7 +115,6 @@ export class UserService {
       }
     }
 
-    // Hash new password if provided
     let passwordHash: string | undefined;
     if (data.password) {
       passwordHash = await bcrypt.hash(data.password, 12);
@@ -164,13 +137,6 @@ export class UserService {
     return updated;
   }
 
-  /**
-   * Deactivates a user account:
-   * - Sets is_active = false
-   * - Revokes all active JWT sessions via Redis
-   * - Invalidates the user's QR credential (stub)
-   * Requirements: 13.5
-   */
   async deactivateUser(id: string): Promise<User> {
     const user = await userRepository.findById(id);
     if (!user) {
@@ -186,23 +152,15 @@ export class UserService {
       throw new AppError(404, 'USER_NOT_FOUND', `User ${id} not found`);
     }
 
-    // Revoke all active JWT sessions for this user
     await jwtService.revokeUserSessions(id);
 
-    // Invalidate QR credential if the user is an IT_Rep
     if (user.role === 'it_rep') {
-      // Stub: full QR invalidation + re-issuance is in task 13.
-      // For now, mark existing credentials as invalid.
       await qrCredentialRepository.invalidateByUserId(id);
     }
 
     return deactivated;
   }
 
-  /**
-   * Fetches a single user by ID.
-   * Requirements: 13.1, 13.2
-   */
   async getUser(id: string): Promise<UserWithDevice> {
     const user = await userRepository.findById(id);
     if (!user) {
@@ -211,35 +169,26 @@ export class UserService {
     return this.attachDevice(user);
   }
 
-  /**
-   * Lists users filtered by a specific org (for Super_Admin use).
-   */
-  async listUsersByOrg(orgId: string): Promise<UserWithDevice[]> {
-    const userList = await userRepository.findAll(orgId, false);
+  async listUsersByRegion(regionId: string): Promise<UserWithDevice[]> {
+    const userList = await userRepository.findAll(regionId, false);
     return Promise.all(userList.map((u) => this.attachDevice(u)));
   }
+
   async listUsers(requestingUser: JwtPayload): Promise<UserWithDevice[]> {
     let userList: User[];
-    if (requestingUser.role === 'super_admin') {
+    if (requestingUser.role === 'super_admin' || requestingUser.role === 'national_command') {
       userList = await userRepository.findAll(undefined, false);
     } else {
-      userList = await userRepository.findAll(requestingUser.orgId, false);
+      userList = await userRepository.findAll(requestingUser.regionId, false);
     }
     return Promise.all(userList.map((u) => this.attachDevice(u)));
   }
 
-  /**
-   * Attaches device info and org name to a user, strips passwordHash.
-   */
   private async attachDevice(user: User): Promise<UserWithDevice> {
-    const [device, org] = await Promise.all([
-      deviceRepository.findByUserId(user.id),
-      organizationRepository.findById(user.orgId),
-    ]);
+    const device = await deviceRepository.findByUserId(user.id);
     const { passwordHash: _omit, ...safeUser } = user;
     return {
       ...safeUser,
-      orgName: org?.name,
       device: device
         ? {
             id: device.id,
@@ -250,93 +199,6 @@ export class UserService {
           }
         : null,
     };
-  }
-
-  /**
-   * Replaces a user's permission set with the given permission names.
-   * The new set must be a subset of the user's organization's Org_Permission_Set.
-   * Rejects with 400 if any permission is not in the org set.
-   * Requirements: 13.7, 13.8
-   */
-  async setUserPermissions(userId: string, permissionNames: string[]): Promise<void> {
-    const user = await userRepository.findById(userId);
-    if (!user) {
-      throw new AppError(404, 'USER_NOT_FOUND', `User ${userId} not found`);
-    }
-
-    // Fetch the org's permission set
-    const orgPermissions = await organizationRepository.getOrgPermissions(user.orgId);
-    const orgPermissionNames = new Set(orgPermissions.map((p) => p.name));
-
-    // Validate: every requested permission must be in the org's set
-    const invalidPermissions = permissionNames.filter((name) => !orgPermissionNames.has(name));
-    if (invalidPermissions.length > 0) {
-      throw new AppError(
-        400,
-        'PERMISSIONS_NOT_IN_ORG_SET',
-        `The following permissions are not in the organization's permission set: ${invalidPermissions.join(', ')}`,
-      );
-    }
-
-    // Resolve permission names → IDs
-    const { getDb } = await import('../db/index');
-    const { permissions } = await import('../db/schema');
-    const db = getDb();
-
-    const allPermissions = await db.select().from(permissions);
-    const nameToId = new Map(allPermissions.map((p) => [p.name, p.id]));
-
-    // Validate all names exist in the system
-    const unknownNames = permissionNames.filter((name) => !nameToId.has(name));
-    if (unknownNames.length > 0) {
-      throw new AppError(
-        400,
-        'UNKNOWN_PERMISSIONS',
-        `Unknown permission names: ${unknownNames.join(', ')}`,
-      );
-    }
-
-    const permissionIds = permissionNames
-      .map((name) => nameToId.get(name)!)
-      .filter((id) => id !== undefined);
-
-    await userRepository.setUserPermissions(userId, permissionIds);
-  }
-
-  /**
-   * Returns the current permission names for a user.
-   * Requirements: 13.7
-   */
-  async getUserPermissions(userId: string): Promise<string[]> {
-    const user = await userRepository.findById(userId);
-    if (!user) {
-      throw new AppError(404, 'USER_NOT_FOUND', `User ${userId} not found`);
-    }
-
-    const perms = await userRepository.getUserPermissions(userId);
-    return perms.map((p) => p.name);
-  }
-
-  /**
-   * Returns the effective permissions for a user — the intersection of the
-   * user's permission set and their organization's permission set.
-   * Requirements: 13.7, 13.8, 18.5
-   */
-  async getEffectivePermissions(userId: string): Promise<string[]> {
-    const user = await userRepository.findById(userId);
-    if (!user) {
-      throw new AppError(404, 'USER_NOT_FOUND', `User ${userId} not found`);
-    }
-
-    const [userPerms, orgPerms] = await Promise.all([
-      userRepository.getUserPermissions(userId),
-      organizationRepository.getOrgPermissions(user.orgId),
-    ]);
-
-    const orgPermissionNames = new Set(orgPerms.map((p) => p.name));
-    return userPerms
-      .map((p) => p.name)
-      .filter((name) => orgPermissionNames.has(name));
   }
 }
 

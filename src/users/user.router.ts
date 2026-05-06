@@ -4,10 +4,8 @@ import {
   createUser,
   updateUser,
   deactivateUser,
-  setUserPermissions,
   getMe,
 } from './user.controller';
-import { assignExamField, removeExamAssignment } from '../devices/device.controller';
 import { authenticate } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 
@@ -15,122 +13,37 @@ const router = Router();
 
 /**
  * GET /api/users/me
- * Returns the current authenticated user and their effective permissions.
- * Requires authentication only — no extra permission needed.
- * Requirements: 13.7, 13.8, 18.5
- *
- * NOTE: This route must be registered BEFORE /:id routes to avoid
- * "me" being interpreted as a UUID parameter.
+ * Returns the current authenticated user.
  */
 router.get('/me', authenticate, getMe);
 
 /**
  * GET /api/users
  * Lists users scoped by the requesting user's role.
- * Requirements: 13.1, 13.2, 13.6
  */
 router.get('/', authenticate, requirePermission('users.view'), listUsers);
 
 /**
  * POST /api/users
  * Creates a new user account.
- * Requirements: 13.1, 13.2, 13.3, 13.4
  */
 router.post('/', authenticate, requirePermission('users.create'), createUser);
 
 /**
  * PATCH /api/users/:id
  * Updates an existing user's fields.
- * Requirements: 13.1, 13.2
  */
 router.patch('/:id', authenticate, requirePermission('users.edit'), updateUser);
 
 /**
  * PATCH /api/users/:id/deactivate
  * Deactivates a user account, revokes sessions, and invalidates QR credential.
- * Requirements: 13.5
  */
 router.patch(
   '/:id/deactivate',
   authenticate,
   requirePermission('users.delete'),
   deactivateUser,
-);
-
-/**
- * PATCH /api/users/:id/permissions
- * Replaces a user's permission set (must be subset of org's permission set).
- * Requirements: 13.7, 13.8
- */
-router.patch(
-  '/:id/permissions',
-  authenticate,
-  requirePermission('users.assign_permissions'),
-  setUserPermissions,
-);
-
-/**
- * PUT /api/users/:userId/exam-assignments
- * Replaces all exam field assignments for a user in one call.
- * Requirements: 3.2, 3.6
- */
-router.put(
-  '/:userId/exam-assignments',
-  authenticate,
-  requirePermission('exam_fields.edit'),
-  async (req, res, next) => {
-    try {
-      const { userId } = req.params;
-      const { examFieldIds } = req.body as { examFieldIds: string[] };
-      const { examCenterAssignmentRepository } = await import('../devices/exam-center-assignment.repository');
-      await examCenterAssignmentRepository.replaceAssignments(userId, examFieldIds ?? []);
-      res.json({ success: true });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-/**
- * GET /api/users/:userId/exam-assignments
- * Returns all exam field assignments for a user.
- * Requirements: 3.2
- */
-router.get(
-  '/:userId/exam-assignments',
-  authenticate,
-  async (req, res, next) => {
-    try {
-      const { userId } = req.params;
-      const { examCenterAssignmentRepository } = await import('../devices/exam-center-assignment.repository');
-      const { examFieldRepository } = await import('../devices/exam-field.repository');
-      const assignments = await examCenterAssignmentRepository.findByUser(userId);
-      const fields = await Promise.all(
-        assignments.map(a => examFieldRepository.findById(a.examFieldId))
-      );
-      res.json({ examFields: fields.filter(Boolean) });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-router.post(
-  '/:userId/exam-assignments',
-  authenticate,
-  requirePermission('exam_fields.edit'),
-  assignExamField,
-);
-
-/**
- * DELETE /api/users/:userId/exam-assignments/:fieldId
- * Removes an exam field assignment from a user.
- * Requirements: 3.2, 3.6
- */
-router.delete(
-  '/:userId/exam-assignments/:fieldId',
-  authenticate,
-  requirePermission('exam_fields.edit'),
-  removeExamAssignment,
 );
 
 export default router;

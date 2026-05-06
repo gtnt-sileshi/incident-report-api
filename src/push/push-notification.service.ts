@@ -53,22 +53,22 @@ export class PushNotificationService {
   }
 
   /**
-   * Sends a push notification to all users in an organization.
-   * Fetches all tokens for all users in the org and dispatches.
+   * Sends a push notification to all users in a region.
+   * Fetches all tokens for all users in the region and dispatches.
    * Requirements: 14.1, 14.2
    */
-  async sendToOrg(orgId: string, payload: PushPayload): Promise<void> {
+  async sendToRegion(regionId: string, payload: PushPayload): Promise<void> {
     try {
-      const tokens = await pushTokenRepository.getTokensForOrg(orgId);
+      const tokens = await pushTokenRepository.getTokensForRegion(regionId);
       if (tokens.length === 0) {
-        console.info(`[PushNotificationService] No tokens found for org ${orgId}`);
+        console.info(`[PushNotificationService] No tokens found for region ${regionId}`);
         return;
       }
 
       await this.dispatchToTokens(tokens, payload);
     } catch (err) {
       // Push delivery failures must not block the primary action
-      console.error('[PushNotificationService] sendToOrg failed:', err);
+      console.error('[PushNotificationService] sendToRegion failed:', err);
     }
   }
 

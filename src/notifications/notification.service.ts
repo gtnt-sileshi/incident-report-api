@@ -25,11 +25,10 @@ export class NotificationService {
       message,
     });
 
-    // Get user's org to publish WebSocket event
+    // Publish WebSocket event scoped to user's region (non-blocking)
     const user = await userRepository.findById(userId);
-    if (user) {
-      // Publish WebSocket event (non-blocking)
-      this.publishNotificationEvent(user.orgId, notification).catch((err) => {
+    if (user && user.regionId) {
+      this.publishNotificationEvent(user.regionId, notification).catch((err) => {
         console.error('[NotificationService] Failed to publish WebSocket event:', err);
       });
     }

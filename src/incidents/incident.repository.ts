@@ -2,9 +2,10 @@ import { eq, and, sql } from 'drizzle-orm';
 import { getDb } from '../db/index';
 import {
   incidents,
-  examFields,
+  examCenters,
+  examRooms,
   incidentTypes,
-  organizations,
+  regions,
   users,
   Incident,
   NewIncident,
@@ -13,20 +14,21 @@ import {
 export interface IncidentFilters {
   status?: string;
   priority?: string;
-  examFieldId?: string;
+  regionId?: string;
+  examCenterId?: string;
+  examRoomId?: string;
   incidentTypeId?: string;
-  assignedOrgId?: string;
   assignedUserId?: string;
   reportedByUserId?: string;
   localId?: string;
 }
 
-// Enriched incident with all related names resolved
 export interface IncidentWithRelations extends Incident {
-  examFieldName: string | null;
+  regionName: string | null;
+  examCenterName: string | null;
+  examRoomName: string | null;
   incidentTypeName: string | null;
   reportedByName: string | null;
-  assignedOrgName: string | null;
   assignedUserName: string | null;
 }
 
@@ -35,18 +37,16 @@ export class IncidentRepository {
     return getDb();
   }
 
-  /**
-   * Build WHERE conditions from filters.
-   */
   private buildConditions(filters?: IncidentFilters): ReturnType<typeof eq>[] {
     const conditions: ReturnType<typeof eq>[] = [];
     if (!filters) return conditions;
 
     if (filters.status)          conditions.push(eq(incidents.status, filters.status));
     if (filters.priority)        conditions.push(eq(incidents.priority, filters.priority));
-    if (filters.examFieldId)     conditions.push(eq(incidents.examFieldId, filters.examFieldId));
+    if (filters.regionId)        conditions.push(eq(incidents.regionId, filters.regionId));
+    if (filters.examCenterId)    conditions.push(eq(incidents.examCenterId, filters.examCenterId));
+    if (filters.examRoomId)      conditions.push(eq(incidents.examRoomId, filters.examRoomId));
     if (filters.incidentTypeId)  conditions.push(eq(incidents.incidentTypeId, filters.incidentTypeId));
-    if (filters.assignedOrgId)   conditions.push(eq(incidents.assignedOrgId, filters.assignedOrgId));
     if (filters.assignedUserId)  conditions.push(eq(incidents.assignedUserId, filters.assignedUserId));
     if (filters.reportedByUserId) conditions.push(eq(incidents.reportedByUserId, filters.reportedByUserId));
     if (filters.localId)         conditions.push(eq(incidents.localId, filters.localId));
@@ -54,26 +54,24 @@ export class IncidentRepository {
     return conditions;
   }
 
-  /**
-   * Enrich a raw incident row with related names via individual lookups.
-   * Using separate queries is simpler than complex LEFT JOINs with Drizzle
-   * and avoids column name collisions.
-   */
   private async enrich(incident: Incident): Promise<IncidentWithRelations> {
     const db = this.db;
 
-    const [examField, incidentType, reporter, assignedOrg, assignedUser] = await Promise.all([
-      incident.examFieldId
-        ? db.select({ name: examFields.name }).from(examFields).where(eq(examFields.id, incident.examFieldId)).limit(1).then(r => r[0] ?? null)
+    const [region, examCenter, examRoom, incidentType, reporter, assignedUser] = await Promise.all([
+      incident.regionId
+        ? db.select({ name: regions.name }).from(regions).where(eq(regions.id, incident.regionId)).limit(1).then(r => r[0] ?? null)
+        : null,
+      incident.examCenterId
+        ? db.select({ name: examCenters.name }).from(examCenters).where(eq(examCenters.id, incident.examCenterId)).limit(1).then(r => r[0] ?? null)
+        : null,
+      incident.examRoomId
+        ? db.select({ name: examRooms.name }).from(examRooms).where(eq(examRooms.id, incident.examRoomId)).limit(1).then(r => r[0] ?? null)
         : null,
       incident.incidentTypeId
         ? db.select({ name: incidentTypes.name }).from(incidentTypes).where(eq(incidentTypes.id, incident.incidentTypeId)).limit(1).then(r => r[0] ?? null)
         : null,
       incident.reportedByUserId
         ? db.select({ name: users.name }).from(users).where(eq(users.id, incident.reportedByUserId)).limit(1).then(r => r[0] ?? null)
-        : null,
-      incident.assignedOrgId
-        ? db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, incident.assignedOrgId)).limit(1).then(r => r[0] ?? null)
         : null,
       incident.assignedUserId
         ? db.select({ name: users.name }).from(users).where(eq(users.id, incident.assignedUserId)).limit(1).then(r => r[0] ?? null)
@@ -82,17 +80,15 @@ export class IncidentRepository {
 
     return {
       ...incident,
-      examFieldName:    examField?.name ?? null,
+      regionName:       region?.name ?? null,
+      examCenterName:   examCenter?.name ?? null,
+      examRoomName:     examRoom?.name ?? null,
       incidentTypeName: incidentType?.name ?? null,
       reportedByName:   reporter?.name ?? null,
-      assignedOrgName:  assignedOrg?.name ?? null,
       assignedUserName: assignedUser?.name ?? null,
     };
   }
 
-  /**
-   * Enrich multiple incidents in parallel (batched).
-   */
   private async enrichAll(rows: Incident[]): Promise<IncidentWithRelations[]> {
     return Promise.all(rows.map((r) => this.enrich(r)));
   }
@@ -151,12 +147,11 @@ export class IncidentRepository {
 
   async updateAssignment(
     id: string,
-    assignedOrgId: string | null,
     assignedUserId: string | null,
   ): Promise<IncidentWithRelations | null> {
     const rows = await this.db
       .update(incidents)
-      .set({ assignedOrgId, assignedUserId, updatedAt: new Date() })
+      .set({ assignedUserId, updatedAt: new Date() })
       .where(eq(incidents.id, id))
       .returning();
     if (!rows[0]) return null;
