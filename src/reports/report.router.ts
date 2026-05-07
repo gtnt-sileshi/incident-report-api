@@ -6,12 +6,15 @@ import {
   generatePostCycleSummary,
   exportReport,
   exportPostCycleSummary,
+  getDashboardStats,
 } from './report.controller';
 
 const router = Router();
 
 // All report routes require authentication
 router.use(authenticate);
+
+router.get('/dashboard-stats', getDashboardStats);
 
 /**
  * GET /api/reports/generate

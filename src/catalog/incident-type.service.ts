@@ -1,6 +1,6 @@
 import { incidentTypeRepository } from './incident-type.repository';
 import { AppError } from '../middleware/errorHandler';
-import { IncidentType, NewIncidentType } from '../db/schema';
+import { IncidentType, NewIncidentType, IssueCategory } from '../db/schema';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -132,6 +132,13 @@ export class IncidentTypeService {
       throw new AppError(404, 'INCIDENT_TYPE_NOT_FOUND', `Incident type ${id} not found`);
     }
     return type;
+  }
+
+  /**
+   * Lists all issue categories.
+   */
+  async listCategories(): Promise<IssueCategory[]> {
+    return incidentTypeRepository.listCategories();
   }
 }
 

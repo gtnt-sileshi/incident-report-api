@@ -111,6 +111,54 @@ export class ReportService {
     };
   }
 
+  async getDashboardStats() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [summary, regionsCount, recent] = await Promise.all([
+      this.db
+        .select({
+          total: sql<number>`COUNT(${incidents.id})::int`,
+          reported: sql<number>`COUNT(CASE WHEN ${incidents.status} = 'Reported' THEN 1 END)::int`,
+          inProgress: sql<number>`COUNT(CASE WHEN ${incidents.status} = 'In-Progress' THEN 1 END)::int`,
+          resolvedToday: sql<number>`COUNT(CASE WHEN ${incidents.status} = 'Resolved' AND ${incidents.resolvedAt} >= ${today.toISOString()} THEN 1 END)::int`,
+        })
+        .from(incidents),
+      
+      this.db
+        .select({
+          name: regions.name,
+          count: sql<number>`COUNT(${incidents.id})::int`,
+        })
+        .from(incidents)
+        .leftJoin(regions, eq(incidents.regionId, regions.id))
+        .groupBy(regions.name)
+        .orderBy(sql`COUNT(${incidents.id}) DESC`),
+
+      this.db
+        .select({
+          id: incidents.id,
+          priority: incidents.priority,
+          status: incidents.status,
+          createdAt: incidents.createdAt,
+          type: incidentTypes.name,
+          location: examCenters.name,
+        })
+        .from(incidents)
+        .leftJoin(incidentTypes, eq(incidents.incidentTypeId, incidentTypes.id))
+        .leftJoin(examCenters, eq(incidents.examCenterId, examCenters.id))
+        .where(sql`${incidents.priority} IN ('High', 'Critical')`)
+        .orderBy(sql`${incidents.createdAt} DESC`)
+        .limit(5),
+    ]);
+
+    return {
+      summary: summary[0] ?? { total: 0, reported: 0, inProgress: 0, resolvedToday: 0 },
+      regions: regionsCount,
+      recentIncidents: recent,
+    };
+  }
+
   private async getIncidentMetrics(filters: ReportFilters): Promise<IncidentMetrics[]> {
     const conditions = this.buildWhereConditions(filters);
 

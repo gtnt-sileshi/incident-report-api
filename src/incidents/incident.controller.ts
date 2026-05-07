@@ -165,9 +165,9 @@ export async function addComment(
   try {
     const user = req.user!;
     const { id } = req.params;
-    const { content } = AddCommentSchema.parse(req.body);
+    const data = AddCommentSchema.parse(req.body);
 
-    const comment = await incidentService.addComment(id, content, user);
+    const comment = await incidentService.addComment(id, data, user);
 
     res.status(201).json({ data: comment });
   } catch (err) {

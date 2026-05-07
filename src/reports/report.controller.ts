@@ -84,6 +84,25 @@ export async function generatePostCycleSummary(
 }
 
 /**
+ * Gets overview stats for the dashboard home page.
+ */
+export async function getDashboardStats(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const stats = await reportService.getDashboardStats();
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * Exports a report in the specified format (pdf or xlsx).
  */
 export async function exportReport(

@@ -15,7 +15,7 @@ export const CreateIncidentSchema = z.object({
   powerClusterId:    z.string().uuid().optional(),
   internetClusterId: z.string().uuid().optional(),
   incidentTypeId:    z.string().uuid(),
-  priority:          z.enum(['Low', 'Medium', 'High']),
+  priority:          z.enum(['Low', 'Medium', 'High', 'Critical']),
   description:       z.string().optional(),
   localId:           z.string().optional(),
   deviceId:          z.string().uuid().optional(),
@@ -27,8 +27,11 @@ export const UpdateStatusSchema = z.object({
 });
 
 export const AssignIncidentSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.string().uuid().optional(),
+  assignedUserId: z.string().uuid().optional(),
   reason: z.string().optional(),
+}).refine(data => data.userId || data.assignedUserId, {
+  message: "Either userId or assignedUserId must be provided",
 });
 
 export const EscalateIncidentSchema = z.object({
@@ -36,7 +39,10 @@ export const EscalateIncidentSchema = z.object({
 });
 
 export const AddCommentSchema = z.object({
-  content: z.string().min(1),
+  body: z.string().min(1).optional(),
+  content: z.string().min(1).optional(),
+}).refine(data => data.body || data.content, {
+  message: "Either body or content must be provided",
 });
 
 export type CreateIncidentData  = z.infer<typeof CreateIncidentSchema>;
@@ -143,7 +149,7 @@ export class IncidentService {
 
   async assignIncident(
     incidentId:     string,
-    data:           AssignIncidentData,
+    data:           { userId?: string; assignedUserId?: string; reason?: string },
     requestingUser: JwtPayload,
   ): Promise<Incident> {
     const incident = await incidentRepository.findById(incidentId);
@@ -162,9 +168,11 @@ export class IncidentService {
 
     const previousUserId = incident.assignedUserId;
 
+    const targetUserId = (data.assignedUserId || data.userId)!;
+
     const updated = await incidentRepository.updateAssignment(
       incidentId,
-      data.userId,
+      targetUserId,
     );
 
     if (!updated) {
@@ -178,7 +186,7 @@ export class IncidentService {
       actionType:    isReassignment ? 'incident_reassigned' : 'incident_assigned',
       fieldChanged:  'assigned_user_id',
       previousValue: previousUserId ?? null,
-      newValue:      data.userId,
+      newValue:      targetUserId,
     });
 
     return updated;
@@ -186,7 +194,7 @@ export class IncidentService {
 
   async addComment(
     incidentId:     string,
-    content:        string,
+    data:           { body?: string; content?: string },
     requestingUser: JwtPayload,
   ): Promise<import('../db/schema').Comment> {
     const incident = await incidentRepository.findById(incidentId);
@@ -205,7 +213,7 @@ export class IncidentService {
     const comment = await commentRepository.create({
       incidentId: incidentId,
       authorId:   requestingUser.sub,
-      body:       content,
+      body:       (data.body || data.content)!,
     });
 
     await auditLogRepository.append({

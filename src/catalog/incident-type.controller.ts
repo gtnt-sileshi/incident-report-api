@@ -7,13 +7,13 @@ import { incidentTypeService } from './incident-type.service';
 const createIncidentTypeSchema = z.object({
   categoryId: z.string().uuid(),
   name: z.string().min(1).max(255),
-  defaultPriority: z.enum(['Low', 'Medium', 'High']),
+  defaultPriority: z.enum(['Low', 'Medium', 'High', 'Critical']),
   description: z.string().optional(),
 });
 
 const updateIncidentTypeSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  defaultPriority: z.enum(['Low', 'Medium', 'High']).optional(),
+  defaultPriority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
   description: z.string().optional(),
   isActive: z.boolean().optional(),
 });
@@ -96,6 +96,24 @@ export async function deleteIncidentType(
     const { id } = req.params;
     const type = await incidentTypeService.softDeleteIncidentType(id);
     res.status(200).json({ incidentType: type });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── GET /api/catalog/categories ─────────────────────────────────────────────
+
+/**
+ * Lists all issue categories.
+ */
+export async function listCategories(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const categories = await incidentTypeService.listCategories();
+    res.status(200).json({ categories });
   } catch (err) {
     next(err);
   }
