@@ -61,6 +61,15 @@ export class DeviceRepository {
     return rows[0] ?? null;
   }
 
+  async update(id: string, data: Partial<NewDevice>): Promise<Device | null> {
+    const rows = await this.db
+      .update(devices)
+      .set(data)
+      .where(eq(devices.id, id))
+      .returning();
+    return rows[0] ?? null;
+  }
+
   async updateLastSeen(id: string): Promise<void> {
     await this.db
       .update(devices)

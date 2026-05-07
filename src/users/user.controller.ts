@@ -26,6 +26,12 @@ const updateUserSchema = z.object({
   role: z.enum(['super_admin', 'national_command', 'regional_dispatcher', 'site_supervisor', 'it_rep', 'invigilator', 'police_liaison', 'power_cluster_officer', 'internet_cluster_officer']).optional(),
   phoneNumber: z.string().max(30).optional(),
   isActive: z.boolean().optional(),
+  deviceId: z.string().min(1).optional(),
+  regionId: z.string().uuid().optional(),
+  examCenterId: z.string().uuid().optional(),
+  examRoomId: z.string().uuid().optional(),
+  powerClusterId: z.string().uuid().optional(),
+  internetClusterId: z.string().uuid().optional(),
 });
 
 // ─── GET /api/users ───────────────────────────────────────────────────────────

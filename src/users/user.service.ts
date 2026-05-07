@@ -28,6 +28,12 @@ export interface UpdateUserData {
   role?: string;
   phoneNumber?: string;
   isActive?: boolean;
+  regionId?: string;
+  examCenterId?: string;
+  examRoomId?: string;
+  powerClusterId?: string;
+  internetClusterId?: string;
+  deviceId?: string;
 }
 
 export interface UserWithDevice extends Omit<User, 'passwordHash'> {
@@ -127,11 +133,30 @@ export class UserService {
       ...(data.role !== undefined && { role: data.role }),
       ...(data.phoneNumber !== undefined && { phoneNumber: data.phoneNumber }),
       ...(data.isActive !== undefined && { isActive: data.isActive }),
+      ...(data.regionId !== undefined && { regionId: data.regionId }),
+      ...(data.examCenterId !== undefined && { examCenterId: data.examCenterId }),
+      ...(data.examRoomId !== undefined && { examRoomId: data.examRoomId }),
+      ...(data.powerClusterId !== undefined && { powerClusterId: data.powerClusterId }),
+      ...(data.internetClusterId !== undefined && { internetClusterId: data.internetClusterId }),
     };
 
     const updated = await userRepository.update(id, updateData);
     if (!updated) {
       throw new AppError(404, 'USER_NOT_FOUND', `User ${id} not found`);
+    }
+
+    // Handle device update if it's an IT rep
+    if (data.deviceId && (data.role === 'it_rep' || user.role === 'it_rep')) {
+      const existingDevice = await deviceRepository.findByUserId(id);
+      if (existingDevice) {
+        await deviceRepository.update(existingDevice.id, { deviceId: data.deviceId });
+      } else {
+        await deviceRepository.register({
+          deviceId: data.deviceId,
+          userId: id,
+          isActive: true,
+        });
+      }
     }
 
     return updated;
