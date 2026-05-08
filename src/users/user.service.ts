@@ -4,6 +4,7 @@ import { deviceRepository } from '../devices/device.repository';
 import { jwtService } from '../auth/jwt.service';
 import { qrCredentialRepository } from '../qr/qr-credential.repository';
 import { AppError } from '../middleware/errorHandler';
+import { auditLogRepository } from '../audit/audit-log.repository';
 import { User, NewUser, Device } from '../db/schema';
 import { JwtPayload } from '../auth/jwt.service';
 
@@ -94,6 +95,13 @@ export class UserService {
 
     const user = await userRepository.create(newUser);
 
+    await auditLogRepository.append({
+      actorUserId: user.id,
+      actorRole: user.role,
+      actionType: 'USER_CREATED',
+      details: `User ${user.name} was registered with role ${user.role}`,
+    } as any);
+
     if (data.role === 'it_rep' && data.deviceId) {
       const existingDevice = await deviceRepository.findByDeviceId(data.deviceId);
       if (!existingDevice) {
@@ -145,6 +153,13 @@ export class UserService {
       throw new AppError(404, 'USER_NOT_FOUND', `User ${id} not found`);
     }
 
+    await auditLogRepository.append({
+      actorUserId: id,
+      actorRole: updated.role,
+      actionType: 'USER_UPDATED',
+      details: `User profile modified. Fields: ${Object.keys(data).filter(k => data[k as keyof typeof data] !== undefined).join(', ')}`,
+    } as any);
+
     // Handle device update if it's an IT rep
     if (data.deviceId && (data.role === 'it_rep' || user.role === 'it_rep')) {
       const existingDevice = await deviceRepository.findByUserId(id);
@@ -182,6 +197,13 @@ export class UserService {
     if (user.role === 'it_rep') {
       await qrCredentialRepository.invalidateByUserId(id);
     }
+
+    await auditLogRepository.append({
+      actorUserId: id,
+      actorRole: user.role,
+      actionType: 'USER_DEACTIVATED',
+      details: `User account suspended`,
+    } as any);
 
     return deactivated;
   }

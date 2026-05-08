@@ -7,6 +7,12 @@ import { deviceService } from './device.service';
 const registerDeviceSchema = z.object({
   deviceId: z.string().min(1).max(255),
   userId: z.string().uuid().optional(),
+  deviceName: z.string().max(255).optional(),
+  model: z.string().max(255).optional(),
+  osVersion: z.string().max(50).optional(),
+  appVersion: z.string().max(50).optional(),
+  installationId: z.string().max(255).optional(),
+  publicKey: z.string().optional(),
   isActive: z.boolean().optional(),
 });
 

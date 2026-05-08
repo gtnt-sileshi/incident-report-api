@@ -19,10 +19,24 @@ export const CreateIncidentSchema = z.object({
   description:       z.string().optional(),
   localId:           z.string().optional(),
   deviceId:          z.string().uuid().optional(),
+  status:            z.string().optional(), // Allow setting status if from mobile (e.g. Draft)
 });
 
 export const UpdateStatusSchema = z.object({
-  status:            z.enum(['Reported', 'Assigned', 'In-Progress', 'Resolved']),
+  status:            z.enum([
+    'Draft', 
+    'Submitted', 
+    'Dispatched', 
+    'Acknowledged', 
+    'In Progress', 
+    'Pending External Support', 
+    'Resolved', 
+    'Resolution Rejected', 
+    'Reopened', 
+    'Escalated', 
+    'Closed', 
+    'Cancelled'
+  ]),
   resolutionSummary: z.string().optional(),
 });
 
@@ -51,10 +65,18 @@ export type AssignIncidentData  = z.infer<typeof AssignIncidentSchema>;
 export type EscalateIncidentData = z.infer<typeof EscalateIncidentSchema>;
 
 export const STATUS_ORDER: Record<string, number> = {
-  'Reported':    0,
-  'Assigned':    1,
-  'In-Progress': 2,
-  'Resolved':    3,
+  'Draft':                    0,
+  'Submitted':                1,
+  'Dispatched':               2,
+  'Acknowledged':             3,
+  'In Progress':              4,
+  'Pending External Support': 5,
+  'Resolved':                 6,
+  'Resolution Rejected':      7,
+  'Reopened':                 8,
+  'Escalated':                9,
+  'Closed':                   10,
+  'Cancelled':                11,
 };
 
 export class IncidentService {
@@ -70,7 +92,7 @@ export class IncidentService {
       reportedByUserId:  requestingUser.sub,
       deviceId:          data.deviceId ?? null,
       priority:          data.priority,
-      status:            'Reported',
+      status:            data.status ?? 'Submitted',
       description:       data.description ?? null,
       assignedUserId:    null,
       localId:           data.localId ?? null,
@@ -85,7 +107,7 @@ export class IncidentService {
       actionType:    'incident_created',
       fieldChanged:  'status',
       previousValue: null,
-      newValue:      'Reported',
+      newValue:      data.status ?? 'Submitted',
     });
 
     return incident;

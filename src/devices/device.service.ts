@@ -3,11 +3,18 @@ import { deviceRepository } from './device.repository';
 import { AppError } from '../middleware/errorHandler';
 import { Device, NewDevice } from '../db/schema';
 import { getDb } from '../db/index';
-import { users } from '../db/schema';
+import { users, devices } from '../db/schema';
+import { auditLogRepository } from '../audit/audit-log.repository';
 
 export interface RegisterDeviceData {
   deviceId: string;
   userId?: string;
+  deviceName?: string;
+  model?: string;
+  osVersion?: string;
+  appVersion?: string;
+  installationId?: string;
+  publicKey?: string;
   isActive?: boolean;
 }
 
@@ -18,6 +25,11 @@ export interface DeviceWithUser {
   isActive: boolean;
   registeredAt: Date;
   lastSeenAt: Date | null;
+  deviceName?: string | null;
+  model?: string | null;
+  osVersion?: string | null;
+  appVersion?: string | null;
+  installationId?: string | null;
   user?: {
     id: string;
     name: string;
@@ -55,10 +67,26 @@ export class DeviceService {
     const newDevice: NewDevice = {
       deviceId: data.deviceId,
       userId: data.userId ?? null,
+      deviceName: data.deviceName ?? null,
+      model: data.model ?? null,
+      osVersion: data.osVersion ?? null,
+      appVersion: data.appVersion ?? null,
+      installationId: data.installationId ?? null,
+      publicKey: data.publicKey ?? null,
       isActive: data.isActive ?? true,
     };
 
-    return deviceRepository.register(newDevice);
+    const device = await deviceRepository.register(newDevice);
+
+    await auditLogRepository.append({
+      actorUserId: data.userId || 'SYSTEM',
+      actorRole: 'DEVICE_MANAGER',
+      actionType: 'DEVICE_REGISTERED',
+      deviceId: device.deviceId,
+      details: `Terminal registered: ${device.model || 'Unknown Model'} (ID: ${device.deviceId})`,
+    } as any);
+
+    return device;
   }
 
   async deactivateDevice(id: string): Promise<Device> {
@@ -75,6 +103,14 @@ export class DeviceService {
     if (!deactivated) {
       throw new AppError(404, 'DEVICE_NOT_FOUND', `Device ${id} not found`);
     }
+
+    await auditLogRepository.append({
+      actorUserId: deactivated.userId || 'SYSTEM',
+      actorRole: 'SECURITY_ADMIN',
+      actionType: 'DEVICE_DEACTIVATED',
+      deviceId: deactivated.deviceId,
+      details: `Terminal access revoked for ID: ${deactivated.deviceId}`,
+    } as any);
 
     return deactivated;
   }
@@ -108,6 +144,11 @@ export class DeviceService {
           isActive: device.isActive,
           registeredAt: device.registeredAt,
           lastSeenAt: device.lastSeenAt,
+          deviceName: device.deviceName,
+          model: device.model,
+          osVersion: device.osVersion,
+          appVersion: device.appVersion,
+          installationId: device.installationId,
           user,
         };
       }),
@@ -146,6 +187,11 @@ export class DeviceService {
       isActive: device.isActive,
       registeredAt: device.registeredAt,
       lastSeenAt: device.lastSeenAt,
+      deviceName: device.deviceName,
+      model: device.model,
+      osVersion: device.osVersion,
+      appVersion: device.appVersion,
+      installationId: device.installationId,
       user,
     };
   }

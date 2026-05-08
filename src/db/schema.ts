@@ -106,14 +106,19 @@ export const users = pgTable('users', {
 // ─── Devices ─────────────────────────────────────────────────────────────────
 
 export const devices = pgTable('devices', {
-  id:           uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  deviceId:     varchar('device_id', { length: 255 }).notNull().unique(),
-  userId:       uuid('user_id').unique().references(() => users.id),
-  deviceName:   varchar('device_name', { length: 255 }),
-  isApproved:   boolean('is_approved').notNull().default(false), // FR-006: Device Approval
-  isActive:     boolean('is_active').notNull().default(true),
-  registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
-  lastSeenAt:   timestamp('last_seen_at', { withTimezone: true }),
+  id:             uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  deviceId:       varchar('device_id', { length: 255 }).notNull().unique(),
+  userId:         uuid('user_id').unique().references(() => users.id),
+  deviceName:     varchar('device_name', { length: 255 }),
+  model:          varchar('model', { length: 255 }), // FR-005
+  osVersion:      varchar('os_version', { length: 50 }), // FR-005
+  appVersion:     varchar('app_version', { length: 50 }), // FR-005
+  installationId: varchar('installation_id', { length: 255 }), // FR-005
+  publicKey:      text('public_key'), // FR-005: For secure device binding
+  isApproved:     boolean('is_approved').notNull().default(false), // FR-006: Device Approval
+  isActive:       boolean('is_active').notNull().default(true),
+  registeredAt:   timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt:     timestamp('last_seen_at', { withTimezone: true }),
 });
 
 // ─── Incident Types & Categories ─────────────────────────────────────────────
