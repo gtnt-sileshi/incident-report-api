@@ -14,7 +14,7 @@ const router = Router();
 
 const guard = [authenticate, requirePermission('exam_periods.manage')];
 
-router.get('/',           ...guard, listExamPeriods);
+router.get('/',           authenticate, listExamPeriods);
 router.post('/',          ...guard, createExamPeriod);
 router.patch('/:id',      ...guard, updateExamPeriod);
 router.delete('/:id',     ...guard, deleteExamPeriod);
