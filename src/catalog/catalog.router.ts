@@ -24,8 +24,18 @@ import {
   updateExamCenter,
   deleteExamCenter,
   listPowerClusters,
+  createPowerCluster,
+  updatePowerCluster,
+  deletePowerCluster,
   listInternetClusters,
+  createInternetCluster,
+  updateInternetCluster,
+  deleteInternetCluster,
   listExamRooms,
+  createExamRoom,
+  updateExamRoom,
+  deleteExamRoom,
+  listHierarchy,
 } from './location.controller';
 import { authenticate } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
@@ -68,9 +78,25 @@ router.post('/exam-centers', authenticate, requirePermission('catalog.create'), 
 router.patch('/exam-centers/:id', authenticate, requirePermission('catalog.edit'), updateExamCenter);
 router.delete('/exam-centers/:id', authenticate, requirePermission('catalog.delete'), deleteExamCenter);
 
-// Clusters
-router.get('/power-clusters', authenticate, requirePermission('catalog.view'), listPowerClusters);
-router.get('/internet-clusters', authenticate, requirePermission('catalog.view'), listInternetClusters);
-router.get('/exam-rooms', authenticate, requirePermission('catalog.view'), listExamRooms);
+// Power Clusters
+router.get('/power-clusters', authenticate, requirePermission('locations.view'), listPowerClusters);
+router.post('/power-clusters', authenticate, requirePermission('locations.manage'), createPowerCluster);
+router.patch('/power-clusters/:id', authenticate, requirePermission('locations.manage'), updatePowerCluster);
+router.delete('/power-clusters/:id', authenticate, requirePermission('locations.manage'), deletePowerCluster);
+
+// Internet Clusters
+router.get('/internet-clusters', authenticate, requirePermission('locations.view'), listInternetClusters);
+router.post('/internet-clusters', authenticate, requirePermission('locations.manage'), createInternetCluster);
+router.patch('/internet-clusters/:id', authenticate, requirePermission('locations.manage'), updateInternetCluster);
+router.delete('/internet-clusters/:id', authenticate, requirePermission('locations.manage'), deleteInternetCluster);
+
+// Exam Rooms
+router.get('/exam-rooms', authenticate, requirePermission('locations.view'), listExamRooms);
+router.post('/exam-rooms', authenticate, requirePermission('locations.manage'), createExamRoom);
+router.patch('/exam-rooms/:id', authenticate, requirePermission('locations.manage'), updateExamRoom);
+router.delete('/exam-rooms/:id', authenticate, requirePermission('locations.manage'), deleteExamRoom);
+
+// Hierarchy
+router.get('/hierarchy', authenticate, requirePermission('catalog.view'), listHierarchy);
 
 export default router;

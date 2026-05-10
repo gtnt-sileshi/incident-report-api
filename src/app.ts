@@ -12,6 +12,10 @@ import pushRouter from './push/push.router';
 import syncRouter from './sync/sync.router';
 import reportsRouter from './reports/report.router';
 import notificationsRouter from './notifications/notification.router';
+import examPeriodsRouter from './exam-periods/exam-period.router';
+import routingRulesRouter from './routing/routing-rule.router';
+import rolesRouter from './roles/role.router';
+import permissionsRouter from './roles/permissions.router';
 
 /**
  * Creates and configures the Express application.
@@ -99,6 +103,10 @@ export function createApp(): Application {
   app.use('/api/sync', syncRouter);
   app.use('/api/reports', reportsRouter);
   app.use('/api/notifications', notificationsRouter);
+  app.use('/api/exam-periods', examPeriodsRouter);
+  app.use('/api/routing-rules', routingRulesRouter);
+  app.use('/api', rolesRouter);
+  app.use('/api', permissionsRouter);
 
   // ─── 404 Handler ────────────────────────────────────────────────────────────
 

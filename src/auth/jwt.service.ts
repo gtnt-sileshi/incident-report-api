@@ -7,6 +7,8 @@ export interface JwtPayload {
   sub: string;       // user ID
   email?: string;
   role: string;
+  roles: string[];              // NEW: all role names
+  permissions: string[];        // NEW: effective permission set
   regionId?: string;
   examCenterId?: string;
   examRoomId?: string;

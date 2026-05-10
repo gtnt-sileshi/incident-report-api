@@ -173,6 +173,27 @@ export class IncidentRepository {
     return this.enrich(rows[0]);
   }
 
+  async updateTrackingNumber(id: string, trackingNumber: string): Promise<void> {
+    await this.db
+      .update(incidents)
+      .set({ trackingNumber, updatedAt: new Date() })
+      .where(eq(incidents.id, id));
+  }
+
+  async reopenIncident(id: string): Promise<IncidentWithRelations | null> {
+    const rows = await this.db
+      .update(incidents)
+      .set({
+        status:      'Reopened',
+        reopenCount: sql`${incidents.reopenCount} + 1`,
+        updatedAt:   new Date(),
+      })
+      .where(eq(incidents.id, id))
+      .returning();
+    if (!rows[0]) return null;
+    return this.enrich(rows[0]);
+  }
+
   async findInProgressBeyondThreshold(
     priorityMinutesMap: Record<string, number>,
   ): Promise<Incident[]> {

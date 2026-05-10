@@ -2,24 +2,32 @@ import { z } from 'zod';
 import { incidentRepository } from './incident.repository';
 import { commentRepository } from './comment.repository';
 import { auditLogRepository } from '../audit/audit-log.repository';
+import { examPeriodRepository } from '../exam-periods/exam-period.repository';
+import { locationRepository } from '../catalog/location.repository';
+import { dispatchService } from '../routing/dispatch.service';
 import { AppError } from '../middleware/errorHandler';
 import { Incident, NewIncident } from '../db/schema';
 import { JwtPayload } from '../auth/jwt.service';
+import { withTransaction } from '../db';
 
 // ─── Zod Schemas ─────────────────────────────────────────────────────────────
 
 export const CreateIncidentSchema = z.object({
-  regionId:          z.string().uuid().optional(),
-  examCenterId:      z.string().uuid().optional(),
-  examRoomId:        z.string().uuid().optional(),
-  powerClusterId:    z.string().uuid().optional(),
-  internetClusterId: z.string().uuid().optional(),
-  incidentTypeId:    z.string().uuid(),
-  priority:          z.enum(['Low', 'Medium', 'High', 'Critical']),
-  description:       z.string().optional(),
-  localId:           z.string().optional(),
-  deviceId:          z.string().uuid().optional(),
-  status:            z.string().optional(), // Allow setting status if from mobile (e.g. Draft)
+  regionId:                z.string().uuid().optional(),
+  examCenterId:            z.string().uuid().optional(),
+  examRoomId:              z.string().uuid().optional(),
+  powerClusterId:          z.string().uuid().optional(),
+  internetClusterId:       z.string().uuid().optional(),
+  incidentTypeId:          z.string().uuid(),
+  priority:                z.enum(['Low', 'Medium', 'High', 'Critical']),
+  description:             z.string().optional(),
+  localId:                 z.string().optional(),
+  deviceId:                z.string().uuid().optional(),
+  status:                  z.string().optional(),
+  studentReference:        z.string().max(100).optional(),
+  gpsLatitude:             z.number().optional(),
+  gpsLongitude:            z.number().optional(),
+  offlineSubmissionStatus: z.enum(['online', 'offline']).optional(),
 });
 
 export const UpdateStatusSchema = z.object({
@@ -80,25 +88,74 @@ export const STATUS_ORDER: Record<string, number> = {
 };
 
 export class IncidentService {
+  /**
+   * Generates a unique tracking number in the format NEIMS-{YEAR}-{CODE}-{SEQUENCE}.
+   * Uses an atomic upsert on tracking_number_sequences to guarantee uniqueness.
+   */
+  async generateTrackingNumber(regionId: string): Promise<string> {
+    const region = await locationRepository.findRegionById(regionId);
+    if (!region?.code) {
+      throw new AppError(422, 'REGION_CODE_MISSING', 'Region has no code defined — tracking number cannot be generated');
+    }
+
+    const year = new Date().getUTCFullYear();
+    const seq = await withTransaction(async (client) => {
+      const result = await client.query<{ last_seq: number }>(
+        `INSERT INTO tracking_number_sequences (region_id, year, last_seq)
+         VALUES ($1, $2, 1)
+         ON CONFLICT (region_id, year) DO UPDATE
+           SET last_seq = tracking_number_sequences.last_seq + 1
+         RETURNING last_seq`,
+        [regionId, year],
+      );
+      return result.rows[0].last_seq;
+    });
+
+    const code   = region.code.toUpperCase().substring(0, 2);
+    const padded = String(seq).padStart(6, '0');
+    return `NEIMS-${year}-${code}-${padded}`;
+  }
+
   async createIncident(
     data: CreateIncidentData,
     requestingUser: JwtPayload,
   ): Promise<Incident> {
+    // Gate: require an active exam period
+    const activePeriod = await examPeriodRepository.findActive();
+    if (!activePeriod) {
+      throw new AppError(403, 'NO_ACTIVE_EXAM_PERIOD', 'No active exam period — incident reporting is currently disabled');
+    }
+
+    const status = data.status ?? 'Submitted';
+    const regionId = data.regionId ?? requestingUser.regionId ?? null;
+
     const incidentData: NewIncident = {
-      regionId:          data.regionId ?? requestingUser.regionId ?? null,
-      examCenterId:      data.examCenterId ?? requestingUser.examCenterId ?? null,
-      examRoomId:        data.examRoomId ?? requestingUser.examRoomId ?? null,
-      incidentTypeId:    data.incidentTypeId,
-      reportedByUserId:  requestingUser.sub,
-      deviceId:          data.deviceId ?? null,
-      priority:          data.priority,
-      status:            data.status ?? 'Submitted',
-      description:       data.description ?? null,
-      assignedUserId:    null,
-      localId:           data.localId ?? null,
+      regionId,
+      examCenterId:            data.examCenterId ?? requestingUser.examCenterId ?? null,
+      examRoomId:              data.examRoomId ?? requestingUser.examRoomId ?? null,
+      incidentTypeId:          data.incidentTypeId,
+      reportedByUserId:        requestingUser.sub,
+      deviceId:                data.deviceId ?? null,
+      priority:                data.priority,
+      status,
+      description:             data.description ?? null,
+      assignedUserId:          null,
+      localId:                 data.localId ?? null,
     };
 
     const incident = await incidentRepository.create(incidentData);
+
+    // Generate tracking number for submitted (non-draft) incidents with a region
+    if (status !== 'Draft' && regionId) {
+      try {
+        const trackingNumber = await this.generateTrackingNumber(regionId);
+        await incidentRepository.updateTrackingNumber(incident.id, trackingNumber);
+        (incident as any).trackingNumber = trackingNumber;
+      } catch (err) {
+        // Log but don't fail — tracking number is non-critical for incident creation
+        console.error('[IncidentService] Failed to generate tracking number:', err);
+      }
+    }
 
     await auditLogRepository.append({
       incidentId:    incident.id,
@@ -107,8 +164,18 @@ export class IncidentService {
       actionType:    'incident_created',
       fieldChanged:  'status',
       previousValue: null,
-      newValue:      data.status ?? 'Submitted',
+      newValue:      status,
     });
+
+    // Auto-dispatch if the incident is not a draft
+    if (status !== 'Draft') {
+      try {
+        await dispatchService.dispatchIncident(incident);
+      } catch (err) {
+        // Log but don't fail — dispatch is best-effort
+        console.error('[IncidentService] Auto-dispatch failed:', err);
+      }
+    }
 
     return incident;
   }
@@ -315,6 +382,83 @@ export class IncidentService {
       fieldChanged:  'status',
       previousValue: incident.status,
       newValue:      'Escalated',
+    });
+
+    return updated;
+  }
+
+  async confirmResolution(
+    incidentId:     string,
+    requestingUser: JwtPayload,
+  ): Promise<Incident> {
+    const incident = await incidentRepository.findById(incidentId);
+    if (!incident) {
+      throw new AppError(404, 'INCIDENT_NOT_FOUND', `Incident ${incidentId} not found`);
+    }
+    if (incident.status !== 'Resolved') {
+      throw new AppError(400, 'INVALID_STATUS_TRANSITION', `Cannot confirm resolution — incident is in "${incident.status}" status, not "Resolved"`);
+    }
+
+    const updated = await incidentRepository.updateStatus(incidentId, 'Closed');
+    if (!updated) {
+      throw new AppError(404, 'INCIDENT_NOT_FOUND', `Incident ${incidentId} not found`);
+    }
+
+    await auditLogRepository.append({
+      incidentId:    incidentId,
+      actorUserId:   requestingUser.sub,
+      actorRole:     requestingUser.role,
+      actionType:    'resolution_confirmed',
+      fieldChanged:  'status',
+      previousValue: 'Resolved',
+      newValue:      'Closed',
+    });
+
+    return updated;
+  }
+
+  async rejectResolution(
+    incidentId:      string,
+    rejectionReason: string,
+    requestingUser:  JwtPayload,
+  ): Promise<Incident> {
+    const incident = await incidentRepository.findById(incidentId);
+    if (!incident) {
+      throw new AppError(404, 'INCIDENT_NOT_FOUND', `Incident ${incidentId} not found`);
+    }
+    if (incident.status !== 'Resolved') {
+      throw new AppError(400, 'INVALID_STATUS_TRANSITION', `Cannot reject resolution — incident is in "${incident.status}" status, not "Resolved"`);
+    }
+    if (!rejectionReason || rejectionReason.trim().length < 10 || rejectionReason.trim().length > 500) {
+      throw new AppError(400, 'INVALID_REJECTION_REASON', 'rejectionReason must be between 10 and 500 characters');
+    }
+
+    // Transition: Resolved → Resolution Rejected
+    await incidentRepository.updateStatus(incidentId, 'Resolution Rejected');
+    await auditLogRepository.append({
+      incidentId:    incidentId,
+      actorUserId:   requestingUser.sub,
+      actorRole:     requestingUser.role,
+      actionType:    'resolution_rejected',
+      fieldChanged:  'status',
+      previousValue: 'Resolved',
+      newValue:      'Resolution Rejected',
+    });
+
+    // Transition: Resolution Rejected → Reopened + increment reopenCount
+    const updated = await incidentRepository.reopenIncident(incidentId);
+    if (!updated) {
+      throw new AppError(404, 'INCIDENT_NOT_FOUND', `Incident ${incidentId} not found`);
+    }
+
+    await auditLogRepository.append({
+      incidentId:    incidentId,
+      actorUserId:   requestingUser.sub,
+      actorRole:     requestingUser.role,
+      actionType:    'incident_reopened',
+      fieldChanged:  'status',
+      previousValue: 'Resolution Rejected',
+      newValue:      'Reopened',
     });
 
     return updated;

@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { userService } from './user.service';
 import { AppError } from '../middleware/errorHandler';
+import { roleRepository } from '../roles/role.repository';
+import { permissionService } from '../roles/permission.service';
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
@@ -125,12 +127,17 @@ export async function getMe(
     const userId = req.user.sub;
     const user = await userService.getUser(userId);
 
+    const userRoles   = await roleRepository.getRolesForUser(userId);
+    const permissions = await permissionService.resolvePermissions(userId);
+
     res.status(200).json({
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
+        roles: userRoles.map((r) => r.name),
+        permissions,
         regionId: user.regionId,
         examCenterId: user.examCenterId,
         examRoomId: user.examRoomId,
@@ -142,7 +149,6 @@ export async function getMe(
         updatedAt: user.updatedAt,
         device: user.device,
       },
-      effectivePermissions: [],
     });
   } catch (err) {
     next(err);

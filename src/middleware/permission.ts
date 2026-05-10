@@ -1,13 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from './errorHandler';
+import { permissionService } from '../roles/permission.service';
 
 /**
- * Role-based permission enforcement middleware.
+ * Dynamic permission enforcement middleware.
  *
- * Checks the user's role against a known mapping of roles → allowed permissions.
- * Super admins are granted all permissions.
+ * Resolves the requesting user's permission set from Redis cache (warm path)
+ * or the database (cold path) via the PermissionService.
+ *
+ * Super admins bypass all checks without any DB or cache query.
  *
  * @param permissionName - The required permission name (e.g., 'incidents.view')
+ *
+ * Requirements: 5
  */
 export function requirePermission(permissionName: string) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
@@ -16,50 +21,26 @@ export function requirePermission(permissionName: string) {
         throw new AppError(401, 'UNAUTHORIZED', 'Authentication required');
       }
 
-      const userRole = req.user.role;
-
-      // Super admin has all permissions
-      if (userRole === 'super_admin') {
+      // Super admin bypasses all checks — no DB/cache query
+      if (req.user.role === 'super_admin') {
         return next();
       }
 
-      // Define write operations that observer roles cannot perform
-      const writeOperations = [
-        'incidents.create',
-        'incidents.edit',
-        'incidents.delete',
-        'incidents.assign',
-        'incidents.update_status',
-        'incidents.resolve',
-        'incidents.escalate',
-        'incidents.comment',
-        'incidents.attach',
-        'users.create',
-        'users.edit',
-        'users.delete',
-        'users.approve',
-        'users.assign_permissions',
-        'devices.register',
-        'devices.deactivate',
-        'catalog.create',
-        'catalog.edit',
-        'catalog.delete',
-        'alerts.sms_trigger',
-        'alerts.push_trigger',
-      ];
-
-      // Observer roles have read-only access
-      const observerRoles = ['moe_observer', 'aa_education_bureau'];
-
-      if (observerRoles.includes(userRole) && writeOperations.includes(permissionName)) {
+      let permissions: string[];
+      try {
+        permissions = await permissionService.resolvePermissions(req.user.sub);
+      } catch {
         throw new AppError(
-          403,
-          'FORBIDDEN',
-          `Read-only access: ${userRole} users cannot perform write operations`,
+          503,
+          'PERMISSION_SERVICE_UNAVAILABLE',
+          'Permission service is temporarily unavailable',
         );
       }
 
-      // For all other roles, allow the request (role-based, not permission-table-based)
+      if (!permissions.includes(permissionName)) {
+        throw new AppError(403, 'FORBIDDEN', `Missing required permission: ${permissionName}`);
+      }
+
       next();
     } catch (err) {
       next(err);

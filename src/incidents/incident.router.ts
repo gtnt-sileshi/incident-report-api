@@ -12,6 +12,8 @@ import {
   escalateIncident,
   triggerSmsAlert,
   uploadAttachments,
+  confirmResolution,
+  rejectResolution,
 } from './incident.controller';
 
 const router = Router();
@@ -67,6 +69,20 @@ router.post('/:id/comments', requirePermission('incidents.comment'), addComment)
  * Requirements: 7.7, 7.8, 7.9
  */
 router.post('/:id/escalate', requirePermission('incidents.escalate'), escalateIncident);
+
+/**
+ * POST /api/incidents/:id/confirm-resolution
+ * Confirm that a resolved incident is actually fixed — transitions to Closed
+ * Requirements: 6
+ */
+router.post('/:id/confirm-resolution', requirePermission('incidents.resolve'), confirmResolution);
+
+/**
+ * POST /api/incidents/:id/reject-resolution
+ * Reject a resolution — transitions Resolved → Resolution Rejected → Reopened
+ * Requirements: 6
+ */
+router.post('/:id/reject-resolution', requirePermission('incidents.resolve'), rejectResolution);
 
 /**
  * POST /api/incidents/:id/sms-alert

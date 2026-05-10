@@ -6,12 +6,20 @@ import { deviceRepository } from '../devices/device.repository';
 import { jwtService } from './jwt.service';
 import { deviceService } from './device.service';
 import { AppError } from '../middleware/errorHandler';
+import { roleRepository } from '../roles/role.repository';
+import { permissionService } from '../roles/permission.service';
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+  email:      z.string().email(),
+  password:   z.string().min(1),
+  // Optional device fields — sent by mobile app, ignored by web clients
+  deviceId:   z.string().max(256).optional(),
+  deviceName: z.string().max(255).optional(),
+  model:      z.string().max(255).optional(),
+  osVersion:  z.string().max(50).optional(),
+  appVersion: z.string().max(50).optional(),
 });
 
 const deviceVerifySchema = z.object({
@@ -45,10 +53,49 @@ export async function login(
       throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
     }
 
+    // ── Device binding check (mobile clients only) ──────────────────────────
+    if (body.deviceId) {
+      const deviceId = body.deviceId;
+      let device = await deviceRepository.findByDeviceId(deviceId);
+
+      if (!device) {
+        // Register new device in pending-approval state
+        await deviceRepository.register({
+          deviceId,
+          userId:     user.id,
+          deviceName: body.deviceName ?? '',
+          model:      body.model ?? '',
+          osVersion:  body.osVersion ?? '',
+          appVersion: body.appVersion ?? '',
+          isApproved: false,
+          isActive:   true,
+        });
+        throw new AppError(403, 'DEVICE_PENDING_APPROVAL', 'Device registered — waiting for administrator approval');
+      }
+
+      if (!device.isApproved) {
+        throw new AppError(403, 'DEVICE_PENDING_APPROVAL', 'Device is pending administrator approval');
+      }
+
+      if (!device.isActive) {
+        throw new AppError(403, 'DEVICE_REVOKED', 'This device has been revoked');
+      }
+
+      // Update last seen timestamp
+      await deviceRepository.updateLastSeen(device.id);
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
+    const userRoles       = await roleRepository.getRolesForUser(user.id);
+    const permissions     = await permissionService.resolvePermissions(user.id);
+    const primaryRoleName = userRoles[0]?.name ?? user.role;
+
     const token = jwtService.issueToken({
       sub: user.id,
       email: user.email ?? '',
-      role: user.role,
+      role: primaryRoleName,
+      roles: userRoles.map((r) => r.name),
+      permissions,
       regionId: user.regionId ?? undefined,
       examCenterId: user.examCenterId ?? undefined,
       examRoomId: user.examRoomId ?? undefined,
@@ -65,13 +112,14 @@ export async function login(
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role,
+        role: primaryRoleName,
+        roles: userRoles.map((r) => r.name),
+        permissions,
         regionId: user.regionId,
         examCenterId: user.examCenterId,
         examRoomId: user.examRoomId,
         powerClusterId: user.powerClusterId,
         internetClusterId: user.internetClusterId,
-        permissions: [],
       },
     });
   } catch (err) {
@@ -117,6 +165,32 @@ export async function deviceVerify(
         regionId: user.regionId,
         examCenterId: user.examCenterId,
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── GET /api/auth/device-status ─────────────────────────────────────────────
+
+export async function deviceStatus(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const userId = req.user!.sub;
+    const device = await deviceRepository.findByUserId(userId);
+
+    if (!device) {
+      res.status(200).json({ deviceId: null, isApproved: false, isActive: false });
+      return;
+    }
+
+    res.status(200).json({
+      deviceId:   device.deviceId,
+      isApproved: device.isApproved,
+      isActive:   device.isActive,
     });
   } catch (err) {
     next(err);

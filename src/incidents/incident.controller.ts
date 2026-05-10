@@ -212,6 +212,37 @@ export async function triggerSmsAlert(
   }
 }
 
+export async function confirmResolution(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user!;
+    const { id } = req.params;
+    const incident = await incidentService.confirmResolution(id, user);
+    res.json({ data: incident });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function rejectResolution(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user!;
+    const { id } = req.params;
+    const { rejectionReason } = req.body as { rejectionReason?: string };
+    const incident = await incidentService.rejectResolution(id, rejectionReason ?? '', user);
+    res.json({ data: incident });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function uploadAttachments(
   req: Request,
   res: Response,

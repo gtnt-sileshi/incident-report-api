@@ -3,7 +3,7 @@ import { deviceRepository } from './device.repository';
 import { AppError } from '../middleware/errorHandler';
 import { Device, NewDevice } from '../db/schema';
 import { getDb } from '../db/index';
-import { users, devices } from '../db/schema';
+import { users } from '../db/schema';
 import { auditLogRepository } from '../audit/audit-log.repository';
 
 export interface RegisterDeviceData {

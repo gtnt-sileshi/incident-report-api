@@ -25,6 +25,8 @@ export class DeviceService {
       sub: user.id,
       email: user.email ?? '',
       role: user.role,
+      roles: [user.role],
+      permissions: [],
       regionId: user.regionId ?? undefined,
       examCenterId: user.examCenterId ?? undefined,
       examRoomId: user.examRoomId ?? undefined,

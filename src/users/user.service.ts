@@ -105,11 +105,17 @@ export class UserService {
     if (data.role === 'it_rep' && data.deviceId) {
       const existingDevice = await deviceRepository.findByDeviceId(data.deviceId);
       if (!existingDevice) {
+        // Pre-approve the device when an admin explicitly registers it alongside the user.
+        // The admin has already verified the device ID, so no separate approval step is needed.
         await deviceRepository.register({
-          deviceId: data.deviceId,
-          userId: user.id,
-          isActive: true,
+          deviceId:   data.deviceId,
+          userId:     user.id,
+          isApproved: true,
+          isActive:   true,
         });
+      } else if (!existingDevice.isApproved) {
+        // Device was previously registered but not yet approved — approve it now.
+        await deviceRepository.update(existingDevice.id, { isApproved: true, userId: user.id });
       }
     }
 

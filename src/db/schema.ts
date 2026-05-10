@@ -8,6 +8,7 @@ import {
   integer,
   bigserial,
   unique,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -257,6 +258,64 @@ export const pushTokens = pgTable('push_tokens', {
   uniq: unique().on(t.userId, t.tokenType, t.deviceId),
 }));
 
+// ─── Routing Rules ───────────────────────────────────────────────────────────
+
+export const routingRules = pgTable('routing_rules', {
+  id:             uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  incidentTypeId: uuid('incident_type_id').references(() => incidentTypes.id),
+  examFieldId:    uuid('exam_field_id').references(() => examCenters.id),
+  targetUserId:   uuid('target_user_id').references(() => users.id),
+  autoAssign:     boolean('auto_assign').notNull().default(false),
+  priority:       integer('priority').notNull().default(100),
+  isActive:       boolean('is_active').notNull().default(true),
+  createdAt:      timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Tracking Number Sequences ───────────────────────────────────────────────
+
+export const trackingNumberSequences = pgTable('tracking_number_sequences', {
+  regionId: uuid('region_id').notNull().references(() => regions.id),
+  year:     integer('year').notNull(),
+  lastSeq:  integer('last_seq').notNull().default(0),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.regionId, t.year] }),
+}));
+
+// ─── Permissions ─────────────────────────────────────────────────────────────
+
+export const permissions = pgTable('permissions', {
+  id:        integer('id').primaryKey(),
+  name:      varchar('name', { length: 100 }).notNull().unique(),
+  groupName: varchar('group_name', { length: 100 }).notNull(),
+});
+
+// ─── Dynamic Roles ───────────────────────────────────────────────────────────
+
+export const roles = pgTable('roles', {
+  id:          uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name:        varchar('name', { length: 100 }).notNull().unique(),
+  description: text('description'),
+  isSystem:    boolean('is_system').notNull().default(false),
+  isActive:    boolean('is_active').notNull().default(true),
+  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const rolePermissions = pgTable('role_permissions', {
+  roleId:       uuid('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
+  permissionId: integer('permission_id').notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.roleId, t.permissionId] }),
+}));
+
+export const userRoles = pgTable('user_roles', {
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  roleId: uuid('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.userId, t.roleId] }),
+}));
+
 // ─── Relations ───────────────────────────────────────────────────────────────
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -344,3 +403,18 @@ export type SmsLog           = typeof smsLog.$inferSelect;
 export type NewSmsLog        = typeof smsLog.$inferInsert;
 export type PushToken        = typeof pushTokens.$inferSelect;
 export type NewPushToken     = typeof pushTokens.$inferInsert;
+
+export type RoutingRule          = typeof routingRules.$inferSelect;
+export type NewRoutingRule       = typeof routingRules.$inferInsert;
+export type TrackingNumberSequence    = typeof trackingNumberSequences.$inferSelect;
+export type NewTrackingNumberSequence = typeof trackingNumberSequences.$inferInsert;
+
+export type Permission       = typeof permissions.$inferSelect;
+export type NewPermission    = typeof permissions.$inferInsert;
+
+export type Role             = typeof roles.$inferSelect;
+export type NewRole          = typeof roles.$inferInsert;
+export type RolePermission   = typeof rolePermissions.$inferSelect;
+export type NewRolePermission = typeof rolePermissions.$inferInsert;
+export type UserRole         = typeof userRoles.$inferSelect;
+export type NewUserRole      = typeof userRoles.$inferInsert;
