@@ -111,6 +111,31 @@ export async function login(
     const permissions     = await permissionService.resolvePermissions(user.id);
     const primaryRoleName = userRoles[0]?.name ?? user.role;
 
+    // Resolve deployment IDs to names
+    const { locationRepository } = await import('../catalog/location.repository');
+    let regionName: string | null = null;
+    let examCenterName: string | null = null;
+    let examRoomName: string | null = null;
+
+    if (user.regionId) {
+      const region = await locationRepository.findRegionById(user.regionId);
+      regionName = region?.name ?? null;
+    }
+    if (user.examCenterId) {
+      const { getDb } = await import('../db/index');
+      const { examCenters } = await import('../db/schema');
+      const { eq } = await import('drizzle-orm');
+      const [center] = await getDb().select().from(examCenters).where(eq(examCenters.id, user.examCenterId));
+      examCenterName = center?.name ?? null;
+    }
+    if (user.examRoomId) {
+      const { getDb } = await import('../db/index');
+      const { examRooms } = await import('../db/schema');
+      const { eq } = await import('drizzle-orm');
+      const [room] = await getDb().select().from(examRooms).where(eq(examRooms.id, user.examRoomId));
+      examRoomName = room?.name ?? null;
+    }
+
     const token = jwtService.issueToken({
       sub: user.id,
       email: user.email ?? '',
@@ -137,8 +162,11 @@ export async function login(
         roles: userRoles.map((r) => r.name),
         permissions,
         regionId: user.regionId,
+        regionName,
         examCenterId: user.examCenterId,
+        examCenterName,
         examRoomId: user.examRoomId,
+        examRoomName,
         powerClusterId: user.powerClusterId,
         internetClusterId: user.internetClusterId,
       },
