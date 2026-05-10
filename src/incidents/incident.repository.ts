@@ -1,4 +1,4 @@
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, desc } from 'drizzle-orm';
 import { getDb } from '../db/index';
 import {
   incidents,
@@ -98,11 +98,11 @@ export class IncidentRepository {
 
     let rows: Incident[];
     if (conditions.length === 0) {
-      rows = await this.db.select().from(incidents);
+      rows = await this.db.select().from(incidents).orderBy(desc(incidents.createdAt));
     } else if (conditions.length === 1) {
-      rows = await this.db.select().from(incidents).where(conditions[0]);
+      rows = await this.db.select().from(incidents).where(conditions[0]).orderBy(desc(incidents.createdAt));
     } else {
-      rows = await this.db.select().from(incidents).where(and(...conditions));
+      rows = await this.db.select().from(incidents).where(and(...conditions)).orderBy(desc(incidents.createdAt));
     }
 
     return this.enrichAll(rows);

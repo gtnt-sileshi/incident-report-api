@@ -59,13 +59,31 @@ export async function login(
       let device = await deviceRepository.findByDeviceId(deviceId);
 
       if (!device) {
-        // Register new device in pending-approval state
+        // Check if this user already has a different device registered
+        const existingUserDevice = await deviceRepository.findByUserId(user.id);
+
+        if (existingUserDevice) {
+          // User has a different device — update it to the new device ID
+          // and reset approval so an admin can verify the new device
+          await deviceRepository.update(existingUserDevice.id, {
+            deviceId,
+            deviceName: body.deviceName ?? existingUserDevice.deviceName ?? '',
+            model:      body.model      ?? existingUserDevice.model      ?? '',
+            osVersion:  body.osVersion  ?? existingUserDevice.osVersion  ?? '',
+            appVersion: body.appVersion ?? existingUserDevice.appVersion ?? '',
+            isApproved: false,
+            isActive:   true,
+          });
+          throw new AppError(403, 'DEVICE_PENDING_APPROVAL', 'New device registered — waiting for administrator approval');
+        }
+
+        // No existing device — register fresh
         await deviceRepository.register({
           deviceId,
           userId:     user.id,
           deviceName: body.deviceName ?? '',
-          model:      body.model ?? '',
-          osVersion:  body.osVersion ?? '',
+          model:      body.model      ?? '',
+          osVersion:  body.osVersion  ?? '',
           appVersion: body.appVersion ?? '',
           isApproved: false,
           isActive:   true,

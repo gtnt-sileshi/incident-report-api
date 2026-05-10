@@ -137,6 +137,14 @@ export class WebSocketServerManager {
     // Subscribe to the user's region channel
     this.subscribeToRegionChannel(ws);
 
+    // Admin roles also subscribe to the global channel so they see all regions
+    if (
+      (payload.role === 'super_admin' || payload.role === 'national_command') &&
+      ws.regionId !== null // already subscribed to global if regionId is null
+    ) {
+      this.addToChannel(ws, 'region:global');
+    }
+
     // Handle pong responses for heartbeat
     ws.on('pong', () => {
       ws.isAlive = true;
@@ -161,28 +169,46 @@ export class WebSocketServerManager {
    */
   private subscribeToRegionChannel(ws: AuthenticatedWebSocket): void {
     const channel = `region:${ws.regionId ?? 'global'}`;
+    this.addToChannel(ws, channel);
+  }
 
-    // Add to the region channel map
+  /**
+   * Adds a WebSocket client to a named channel.
+   */
+  private addToChannel(ws: AuthenticatedWebSocket, channel: string): void {
     if (!this.regionChannelMap.has(channel)) {
       this.regionChannelMap.set(channel, new Set());
     }
     this.regionChannelMap.get(channel)!.add(ws);
-
     console.info(`[WebSocket] Subscribed userId=${ws.userId} to channel=${channel}`);
   }
 
   /**
-   * Unsubscribes a WebSocket connection from its region's Redis pub/sub channel.
+   * Removes a WebSocket client from a named channel.
    */
-  private unsubscribeFromRegionChannel(ws: AuthenticatedWebSocket): void {
-    const channel = `region:${ws.regionId ?? 'global'}`;
-
+  private removeFromChannel(ws: AuthenticatedWebSocket, channel: string): void {
     const clients = this.regionChannelMap.get(channel);
     if (clients) {
       clients.delete(ws);
       if (clients.size === 0) {
         this.regionChannelMap.delete(channel);
       }
+    }
+  }
+
+  /**
+   * Unsubscribes a WebSocket connection from all its channels.
+   */
+  private unsubscribeFromRegionChannel(ws: AuthenticatedWebSocket): void {
+    const channel = `region:${ws.regionId ?? 'global'}`;
+    this.removeFromChannel(ws, channel);
+
+    // Also remove from global if this was an admin
+    if (
+      (ws.role === 'super_admin' || ws.role === 'national_command') &&
+      ws.regionId !== null
+    ) {
+      this.removeFromChannel(ws, 'region:global');
     }
 
     console.info(`[WebSocket] Unsubscribed userId=${ws.userId} from channel=${channel}`);

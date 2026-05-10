@@ -9,6 +9,26 @@ import { AppError } from '../middleware/errorHandler';
 import { Incident, NewIncident } from '../db/schema';
 import { JwtPayload } from '../auth/jwt.service';
 import { withTransaction } from '../db';
+import { getRedis } from '../db/redis';
+
+// ─── Helper: publish a WebSocket event to the region's Redis channel ─────────
+
+function publishEvent(regionId: string | null, event: string, data: unknown): void {
+  const message = JSON.stringify({ event, data });
+  const regionChannel = `region:${regionId ?? 'global'}`;
+
+  // Always publish to the specific region channel
+  getRedis().publish(regionChannel, message).catch((err: Error) => {
+    console.error(`[IncidentService] Failed to publish ${event} to ${regionChannel}:`, err.message);
+  });
+
+  // Also publish to the global channel so super_admin / national_command dashboards get it
+  if (regionId) {
+    getRedis().publish('region:global', message).catch((err: Error) => {
+      console.error(`[IncidentService] Failed to publish ${event} to region:global:`, err.message);
+    });
+  }
+}
 
 // ─── Zod Schemas ─────────────────────────────────────────────────────────────
 
@@ -177,6 +197,17 @@ export class IncidentService {
       }
     }
 
+    // Broadcast to dashboard and mobile clients in real time
+    publishEvent(regionId, 'incident.created', {
+      incidentId:     incident.id,
+      trackingNumber: (incident as any).trackingNumber ?? null,
+      status:         incident.status,
+      priority:       incident.priority,
+      regionId:       incident.regionId,
+      examCenterId:   incident.examCenterId,
+      reportedByUserId: incident.reportedByUserId,
+    });
+
     return incident;
   }
 
@@ -231,6 +262,17 @@ export class IncidentService {
       fieldChanged:  'status',
       previousValue: incident.status,
       newValue:      newStatus,
+    });
+
+    // Broadcast status change to dashboard and mobile clients in real time
+    publishEvent(updated.regionId, 'incident.status_changed', {
+      incidentId:       incidentId,
+      newStatus,
+      previousStatus:   incident.status,
+      regionId:         updated.regionId,
+      examCenterId:     updated.examCenterId,
+      reportedByUserId: updated.reportedByUserId,
+      resolvedAt:       newStatus === 'Resolved' ? updated.resolvedAt : null,
     });
 
     return updated;
