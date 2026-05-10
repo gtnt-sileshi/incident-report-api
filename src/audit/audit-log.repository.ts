@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, asc, count as drizzleCount } from 'drizzle-orm';
+import { eq, and, gte, lte, desc, count as drizzleCount } from 'drizzle-orm';
 import { getDb } from '../db/index';
 import { auditLog, AuditLogEntry, NewAuditLogEntry } from '../db/schema';
 
@@ -29,7 +29,7 @@ export class AuditLogRepository {
       .select()
       .from(auditLog)
       .where(eq(auditLog.incidentId, incidentId))
-      .orderBy(asc(auditLog.occurredAt));
+      .orderBy(desc(auditLog.occurredAt));
   }
 
   async count(filters: AuditLogFilters = {}): Promise<number> {
@@ -80,7 +80,7 @@ export class AuditLogRepository {
     const query = this.db
       .select()
       .from(auditLog)
-      .orderBy(asc(auditLog.occurredAt))
+      .orderBy(desc(auditLog.occurredAt))
       .limit(limit)
       .offset(offset);
 
