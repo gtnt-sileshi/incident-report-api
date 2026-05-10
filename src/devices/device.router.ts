@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listDevices, registerDevice, toggleDeviceStatus } from './device.controller';
+import { listDevices, registerDevice, toggleDeviceStatus, deleteDevice } from './device.controller';
 import { authenticate } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 
@@ -38,6 +38,17 @@ router.patch(
   authenticate,
   requirePermission('devices.deactivate'),
   toggleDeviceStatus,
+);
+
+/**
+ * DELETE /api/devices/:id
+ * Deletes a registered device and unlinks the user.
+ */
+router.delete(
+  '/:id',
+  authenticate,
+  requirePermission('devices.deactivate'),
+  deleteDevice,
 );
 
 export default router;

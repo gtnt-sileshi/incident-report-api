@@ -102,6 +102,12 @@ export class DeviceRepository {
       .set({ lastSeenAt: sql`NOW()` })
       .where(eq(devices.id, id));
   }
+
+  async delete(id: string): Promise<void> {
+    await this.db
+      .delete(devices)
+      .where(eq(devices.id, id));
+  }
 }
 
 export const deviceRepository = new DeviceRepository();

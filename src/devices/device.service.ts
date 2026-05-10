@@ -123,7 +123,14 @@ export class DeviceService {
       throw new AppError(404, 'DEVICE_NOT_FOUND', `Device ${id} not found`);
     }
 
-    const updated = await deviceRepository.update(id, { isActive: !device.isActive });
+    const newIsActive = !device.isActive;
+    // If we are deactivating, we also unlink the user so they can login elsewhere
+    const updateData: Partial<NewDevice> = { isActive: newIsActive };
+    if (!newIsActive) {
+      updateData.userId = null;
+    }
+
+    const updated = await deviceRepository.update(id, updateData);
     if (!updated) {
       throw new AppError(404, 'DEVICE_NOT_FOUND', `Device ${id} not found`);
     }
@@ -133,10 +140,27 @@ export class DeviceService {
       actorRole: requestingUser?.role ?? 'SECURITY_ADMIN',
       actionType: updated.isActive ? 'DEVICE_ACTIVATED' : 'DEVICE_DEACTIVATED',
       deviceId: updated.deviceId,
-      details: `Terminal access ${updated.isActive ? 'restored' : 'revoked'} for ID: ${updated.deviceId} by ${requestingUser?.email ?? 'System'}`,
+      details: `Terminal access ${updated.isActive ? 'restored' : 'revoked'} for ID: ${updated.deviceId} by ${requestingUser?.email ?? 'System'}${!updated.isActive ? ' (User unlinked)' : ''}`,
     });
 
     return updated;
+  }
+
+  async deleteDevice(id: string, requestingUser?: JwtPayload): Promise<void> {
+    const device = await deviceRepository.findById(id);
+    if (!device) {
+      throw new AppError(404, 'DEVICE_NOT_FOUND', `Device ${id} not found`);
+    }
+
+    await deviceRepository.delete(id);
+
+    await auditLogRepository.append({
+      actorUserId: requestingUser?.sub ?? 'SYSTEM',
+      actorRole: requestingUser?.role ?? 'SECURITY_ADMIN',
+      actionType: 'DEVICE_DELETED',
+      deviceId: device.deviceId,
+      details: `Terminal record deleted for ID: ${device.deviceId} by ${requestingUser?.email ?? 'System'}. Associated user was unlinked.`,
+    });
   }
 
   async listDevices(options: { includeInactive?: boolean; limit?: number; offset?: number } = {}): Promise<{ devices: DeviceWithUser[]; total: number }> {

@@ -80,3 +80,18 @@ export async function toggleDeviceStatus(
     next(err);
   }
 }
+
+// ─── DELETE /api/devices/:id ──────────────────────────────────────────────
+export async function deleteDevice(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = req.params;
+    await deviceService.deleteDevice(id, req.user);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
