@@ -21,6 +21,8 @@ export interface IncidentFilters {
   assignedUserId?: string;
   reportedByUserId?: string;
   localId?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export interface IncidentWithRelations extends Incident {
@@ -93,19 +95,32 @@ export class IncidentRepository {
     return Promise.all(rows.map((r) => this.enrich(r)));
   }
 
-  async findAll(filters?: IncidentFilters): Promise<IncidentWithRelations[]> {
+  async findAll(filters?: IncidentFilters): Promise<{ data: IncidentWithRelations[]; total: number }> {
     const conditions = this.buildConditions(filters);
+    const limit = filters?.limit ?? 100;
+    const offset = filters?.offset ?? 0;
 
-    let rows: Incident[];
-    if (conditions.length === 0) {
-      rows = await this.db.select().from(incidents).orderBy(desc(incidents.createdAt));
-    } else if (conditions.length === 1) {
-      rows = await this.db.select().from(incidents).where(conditions[0]).orderBy(desc(incidents.createdAt));
-    } else {
-      rows = await this.db.select().from(incidents).where(and(...conditions)).orderBy(desc(incidents.createdAt));
+    let query = this.db.select().from(incidents).orderBy(desc(incidents.createdAt));
+    let countQuery = this.db.select({ count: sql<number>`count(*)::int` }).from(incidents);
+
+    if (conditions.length === 1) {
+      query = query.where(conditions[0]) as any;
+      countQuery = countQuery.where(conditions[0]) as any;
+    } else if (conditions.length > 1) {
+      query = query.where(and(...conditions)) as any;
+      countQuery = countQuery.where(and(...conditions)) as any;
     }
 
-    return this.enrichAll(rows);
+    const [rows, countResult] = await Promise.all([
+      query.limit(limit).offset(offset),
+      countQuery
+    ]);
+
+    const enriched = await this.enrichAll(rows);
+    return {
+      data: enriched,
+      total: countResult[0]?.count ?? 0
+    };
   }
 
   async findById(id: string): Promise<IncidentWithRelations | null> {

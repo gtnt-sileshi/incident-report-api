@@ -363,16 +363,16 @@ export class IncidentService {
   async listIncidents(
     requestingUser: JwtPayload,
     filters?: import('./incident.repository').IncidentFilters,
-  ): Promise<Incident[]> {
+  ): Promise<{ data: import('./incident.repository').IncidentWithRelations[]; total: number }> {
     if (requestingUser.role === 'super_admin' || requestingUser.role === 'national_command') {
       return incidentRepository.findAll(filters);
     }
 
     return incidentRepository.findAll({
       ...filters,
-      regionId: requestingUser.regionId,
-      examCenterId: requestingUser.examCenterId,
-      examRoomId: requestingUser.examRoomId,
+      regionId: requestingUser.regionId ?? undefined,
+      examCenterId: requestingUser.examCenterId ?? undefined,
+      examRoomId: requestingUser.examRoomId ?? undefined,
     });
   }
 

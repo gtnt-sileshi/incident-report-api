@@ -19,6 +19,10 @@ export async function listIncidents(
 ): Promise<void> {
   try {
     const user = req.user!;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
+
     const filters = {
       status:            req.query.status as string | undefined,
       priority:          req.query.priority as string | undefined,
@@ -29,11 +33,13 @@ export async function listIncidents(
       internetClusterId: req.query.internetClusterId as string | undefined,
       incidentTypeId:    req.query.incidentTypeId as string | undefined,
       assignedUserId:    req.query.assignedUserId as string | undefined,
+      limit,
+      offset
     };
 
-    const incidents = await incidentService.listIncidents(user, filters);
+    const result = await incidentService.listIncidents(user, filters);
 
-    res.json({ data: incidents });
+    res.json(result);
   } catch (err) {
     next(err);
   }
