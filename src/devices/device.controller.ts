@@ -30,8 +30,16 @@ export async function listDevices(
 ): Promise<void> {
   try {
     const includeInactive = req.query['includeInactive'] === 'true';
-    const deviceList = await deviceService.listDevices(includeInactive);
-    res.status(200).json({ devices: deviceList });
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
+
+    const result = await deviceService.listDevices({
+      includeInactive,
+      limit,
+      offset
+    });
+    res.status(200).json(result);
   } catch (err) {
     next(err);
   }

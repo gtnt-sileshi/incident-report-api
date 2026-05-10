@@ -20,7 +20,7 @@ export async function listIncidents(
   try {
     const user = req.user!;
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = parseInt(req.query.limit as string) || 50;
     const offset = (page - 1) * limit;
 
     const filters = {
@@ -33,6 +33,7 @@ export async function listIncidents(
       internetClusterId: req.query.internetClusterId as string | undefined,
       incidentTypeId:    req.query.incidentTypeId as string | undefined,
       assignedUserId:    req.query.assignedUserId as string | undefined,
+      reportedByUserId:  req.query.reportedByUserId as string | undefined,
       limit,
       offset
     };

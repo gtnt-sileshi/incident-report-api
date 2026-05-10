@@ -138,47 +138,29 @@ export class DeviceService {
     return updated;
   }
 
-  async listDevices(includeInactive = true): Promise<DeviceWithUser[]> {
-    const allDevices = await deviceRepository.findAll(includeInactive);
-
-    const enriched = await Promise.all(
-      allDevices.map(async (device) => {
-        let user: DeviceWithUser['user'] = null;
-
-        if (device.userId) {
-          const userRows = await this.db
-            .select({
-              id: users.id,
-              name: users.name,
-              email: users.email,
-              role: users.role,
-            })
-            .from(users)
-            .where(eq(users.id, device.userId))
-            .limit(1);
-
-          user = userRows[0] ?? null;
+  async listDevices(options: { includeInactive?: boolean; limit?: number; offset?: number } = {}): Promise<{ devices: DeviceWithUser[]; total: number }> {
+    const { devices, total } = await deviceRepository.findAll(options);
+    
+    const enriched = await Promise.all(devices.map(async (d) => {
+      let user = null;
+      if (d.userId) {
+        const u = await this.db.select().from(users).where(eq(users.id, d.userId)).limit(1);
+        if (u[0]) {
+          user = {
+            id: u[0].id,
+            name: u[0].name,
+            email: u[0].email,
+            role: u[0].role,
+          };
         }
+      }
+      return {
+        ...d,
+        user,
+      };
+    }));
 
-        return {
-          id: device.id,
-          deviceId: device.deviceId,
-          userId: device.userId,
-          isActive: device.isActive,
-          registeredAt: device.registeredAt,
-          lastSeenAt: device.lastSeenAt,
-          deviceName: device.deviceName,
-          model: device.model,
-          osVersion: device.osVersion,
-          appVersion: device.appVersion,
-          installationId: device.installationId,
-          isApproved: device.isApproved,
-          user,
-        };
-      }),
-    );
-
-    return enriched;
+    return { devices: enriched, total };
   }
 
   async getDevice(id: string): Promise<DeviceWithUser> {

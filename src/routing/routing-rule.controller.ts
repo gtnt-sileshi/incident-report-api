@@ -6,8 +6,8 @@ import { AppError } from '../middleware/errorHandler';
 // ─── Validation Schemas ───────────────────────────────────────────────────────
 
 const createRoutingRuleSchema = z.object({
-  incidentTypeId: z.string().uuid().optional(),
-  examFieldId:    z.string().uuid().optional(),
+  incidentTypeId: z.string().uuid().nullable().optional(),
+  examFieldId:    z.string().uuid().nullable().optional(),
   targetUserId:   z.string().uuid(),
   autoAssign:     z.boolean().optional().default(false),
   priority:       z.number().int().min(1).optional().default(100),

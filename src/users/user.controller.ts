@@ -49,15 +49,18 @@ export async function listUsers(
     }
 
     const regionIdFilter = req.query['regionId'] as string | undefined;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
 
-    let users;
+    let result;
     if ((req.user.role === 'super_admin' || req.user.role === 'national_command') && regionIdFilter) {
-      users = await userService.listUsersByRegion(regionIdFilter);
+      result = await userService.listUsersByRegion(regionIdFilter, limit, offset);
     } else {
-      users = await userService.listUsers(req.user);
+      result = await userService.listUsers(req.user, limit, offset);
     }
 
-    res.status(200).json({ users });
+    res.status(200).json(result);
   } catch (err) {
     next(err);
   }

@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { getDb } from '../db/index';
 import {
   users,
@@ -11,7 +11,8 @@ export class UserRepository {
     return getDb();
   }
 
-  async findAll(regionId?: string, includeInactive = false): Promise<User[]> {
+  async findAll(options: { regionId?: string; includeInactive?: boolean; limit?: number; offset?: number } = {}): Promise<{ users: User[]; total: number }> {
+    const { regionId, includeInactive = false, limit = 10, offset = 0 } = options;
     const conditions = [];
 
     if (regionId) {
@@ -21,13 +22,32 @@ export class UserRepository {
       conditions.push(eq(users.isActive, true));
     }
 
+    const baseQuery = this.db.select().from(users);
+    const countQuery = this.db.select({ count: sql<number>`count(*)::int` }).from(users);
+
+    let finalQuery: any;
+    let finalCountQuery: any;
+
     if (conditions.length === 0) {
-      return this.db.select().from(users);
+      finalQuery = baseQuery;
+      finalCountQuery = countQuery;
+    } else if (conditions.length === 1) {
+      finalQuery = baseQuery.where(conditions[0]);
+      finalCountQuery = countQuery.where(conditions[0]);
+    } else {
+      finalQuery = baseQuery.where(and(...conditions));
+      finalCountQuery = countQuery.where(and(...conditions));
     }
-    if (conditions.length === 1) {
-      return this.db.select().from(users).where(conditions[0]);
-    }
-    return this.db.select().from(users).where(and(...conditions));
+
+    const [rows, totalResult] = await Promise.all([
+      finalQuery.limit(limit).offset(offset),
+      finalCountQuery,
+    ]);
+
+    return {
+      users: rows,
+      total: totalResult[0]?.count ?? 0,
+    };
   }
 
   async findAllByRole(role: string, includeInactive = false): Promise<User[]> {

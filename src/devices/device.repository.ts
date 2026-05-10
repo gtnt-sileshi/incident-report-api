@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { getDb } from '../db/index';
 import { devices, Device, NewDevice } from '../db/schema';
 
@@ -7,14 +7,40 @@ export class DeviceRepository {
     return getDb();
   }
 
-  async findAll(includeInactive = false): Promise<Device[]> {
-    if (includeInactive) {
-      return this.db.select().from(devices);
+  async findAll(options: { includeInactive?: boolean; limit?: number; offset?: number } = {}): Promise<{ devices: Device[]; total: number }> {
+    const { includeInactive = false, limit = 10, offset = 0 } = options;
+    
+    const baseQuery = this.db.select().from(devices);
+    const countQuery = this.db.select({ count: sql<number>`count(*)::int` }).from(devices);
+
+    const conditions = [];
+    if (!includeInactive) {
+      conditions.push(eq(devices.isActive, true));
     }
-    return this.db
-      .select()
-      .from(devices)
-      .where(eq(devices.isActive, true));
+
+    let finalQuery: any;
+    let finalCountQuery: any;
+
+    if (conditions.length === 0) {
+      finalQuery = baseQuery;
+      finalCountQuery = countQuery;
+    } else if (conditions.length === 1) {
+      finalQuery = baseQuery.where(conditions[0]);
+      finalCountQuery = countQuery.where(conditions[0]);
+    } else {
+      finalQuery = baseQuery.where(and(...conditions));
+      finalCountQuery = countQuery.where(and(...conditions));
+    }
+
+    const [rows, totalResult] = await Promise.all([
+      finalQuery.limit(limit).offset(offset),
+      finalCountQuery,
+    ]);
+
+    return {
+      devices: rows,
+      total: totalResult[0]?.count ?? 0,
+    };
   }
 
   async findById(id: string): Promise<Device | null> {

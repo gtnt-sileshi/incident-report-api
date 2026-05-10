@@ -22,13 +22,13 @@ const updateClusterSchema = z.object({
 const createExamRoomSchema = z.object({
   examCenterId: z.string().uuid(),
   name:         z.string().min(1).max(255),
-  capacity:     z.number().int().positive().optional(),
+  capacity:     z.coerce.number().int().positive().optional(),
   isActive:     z.boolean().optional(),
 });
 
 const updateExamRoomSchema = z.object({
   name:     z.string().min(1).max(255).optional(),
-  capacity: z.number().int().positive().optional(),
+  capacity: z.coerce.number().int().positive().optional(),
   isActive: z.boolean().optional(),
 });
 

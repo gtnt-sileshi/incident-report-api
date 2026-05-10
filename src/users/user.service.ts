@@ -171,38 +171,38 @@ export class UserService {
     if (!user) {
       throw new AppError(404, 'USER_NOT_FOUND', `User ${id} not found`);
     }
-    return this.attachDevice(user);
+    return this.enrichWithDevice(user);
   }
 
-  async listUsersByRegion(regionId: string): Promise<UserWithDevice[]> {
-    const userList = await userRepository.findAll(regionId, false);
-    return Promise.all(userList.map((u) => this.attachDevice(u)));
+  async listUsersByRegion(regionId: string, limit = 10, offset = 0): Promise<{ users: UserWithDevice[]; total: number }> {
+    const { users, total } = await userRepository.findAll({ regionId, limit, offset });
+    const enriched = await Promise.all(users.map(u => this.enrichWithDevice(u)));
+    return { users: enriched, total };
   }
 
-  async listUsers(requestingUser: JwtPayload): Promise<UserWithDevice[]> {
-    let userList: User[];
-    if (requestingUser.role === 'super_admin' || requestingUser.role === 'national_command') {
-      userList = await userRepository.findAll(undefined, false);
-    } else {
-      userList = await userRepository.findAll(requestingUser.regionId, false);
-    }
-    return Promise.all(userList.map((u) => this.attachDevice(u)));
+  async listUsers(requestingUser: JwtPayload, limit = 10, offset = 0): Promise<{ users: UserWithDevice[]; total: number }> {
+    // Basic scoping: non-admins only see users in their same region
+    const regionId = (requestingUser.role !== 'super_admin' && requestingUser.role !== 'national_command') 
+      ? (requestingUser.regionId ?? undefined)
+      : undefined;
+
+    const { users, total } = await userRepository.findAll({ regionId, limit, offset });
+    const enriched = await Promise.all(users.map(u => this.enrichWithDevice(u)));
+    return { users: enriched, total };
   }
 
-  private async attachDevice(user: User): Promise<UserWithDevice> {
+  private async enrichWithDevice(user: User): Promise<UserWithDevice> {
     const device = await deviceRepository.findByUserId(user.id);
-    const { passwordHash: _omit, ...safeUser } = user;
+    const { passwordHash, ...userWithoutPassword } = user as any;
     return {
-      ...safeUser,
-      device: device
-        ? {
-            id: device.id,
-            deviceId: device.deviceId,
-            isActive: device.isActive,
-            registeredAt: device.registeredAt,
-            lastSeenAt: device.lastSeenAt,
-          }
-        : null,
+      ...userWithoutPassword,
+      device: device ? {
+        id: device.id,
+        deviceId: device.deviceId,
+        isActive: device.isActive,
+        registeredAt: device.registeredAt,
+        lastSeenAt: device.lastSeenAt,
+      } : null
     };
   }
 }
