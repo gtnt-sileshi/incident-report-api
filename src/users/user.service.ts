@@ -50,29 +50,8 @@ export class UserService {
       }
     }
 
-    if (data.role === 'it_rep') {
-      if (!data.deviceId) {
-        throw new AppError(
-          400,
-          'DEVICE_ID_REQUIRED',
-          'A Device_ID is required when creating an IT_Representative account',
-        );
-      }
-
-      const existingDevice = await deviceRepository.findByDeviceId(data.deviceId);
-      if (existingDevice && existingDevice.isActive) {
-        if (existingDevice.userId) {
-          const linkedUser = await userRepository.findById(existingDevice.userId);
-          if (linkedUser && linkedUser.isActive && linkedUser.role === 'it_rep') {
-            throw new AppError(
-              409,
-              'DEVICE_ID_CONFLICT',
-              `Device_ID "${data.deviceId}" is already associated with an active IT_Representative`,
-            );
-          }
-        }
-      }
-    }
+    // Device binding requirement removed during creation. 
+    // It will be captured during first login on mobile app.
 
     let passwordHash: string | undefined;
     if (data.password) {
@@ -102,22 +81,7 @@ export class UserService {
       details: `User ${user.name} was registered with role ${user.role}`,
     } as any);
 
-    if (data.role === 'it_rep' && data.deviceId) {
-      const existingDevice = await deviceRepository.findByDeviceId(data.deviceId);
-      if (!existingDevice) {
-        // Pre-approve the device when an admin explicitly registers it alongside the user.
-        // The admin has already verified the device ID, so no separate approval step is needed.
-        await deviceRepository.register({
-          deviceId:   data.deviceId,
-          userId:     user.id,
-          isApproved: true,
-          isActive:   true,
-        });
-      } else if (!existingDevice.isApproved) {
-        // Device was previously registered but not yet approved — approve it now.
-        await deviceRepository.update(existingDevice.id, { isApproved: true, userId: user.id });
-      }
-    }
+    return user;
 
     return user;
   }
@@ -166,19 +130,7 @@ export class UserService {
       details: `User profile modified. Fields: ${Object.keys(data).filter(k => data[k as keyof typeof data] !== undefined).join(', ')}`,
     } as any);
 
-    // Handle device update if it's an IT rep
-    if (data.deviceId && (data.role === 'it_rep' || user.role === 'it_rep')) {
-      const existingDevice = await deviceRepository.findByUserId(id);
-      if (existingDevice) {
-        await deviceRepository.update(existingDevice.id, { deviceId: data.deviceId });
-      } else {
-        await deviceRepository.register({
-          deviceId: data.deviceId,
-          userId: id,
-          isActive: true,
-        });
-      }
-    }
+    // Device update via profile is now optional/removed as binding is handled on login.
 
     return updated;
   }

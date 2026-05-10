@@ -30,6 +30,7 @@ export interface DeviceWithUser {
   osVersion?: string | null;
   appVersion?: string | null;
   installationId?: string | null;
+  isApproved: boolean;
   user?: {
     id: string;
     name: string;
@@ -115,7 +116,29 @@ export class DeviceService {
     return deactivated;
   }
 
-  async listDevices(includeInactive = false): Promise<DeviceWithUser[]> {
+  async toggleDeviceStatus(id: string): Promise<Device> {
+    const device = await deviceRepository.findById(id);
+    if (!device) {
+      throw new AppError(404, 'DEVICE_NOT_FOUND', `Device ${id} not found`);
+    }
+
+    const updated = await deviceRepository.update(id, { isActive: !device.isActive });
+    if (!updated) {
+      throw new AppError(404, 'DEVICE_NOT_FOUND', `Device ${id} not found`);
+    }
+
+    await auditLogRepository.append({
+      actorUserId: updated.userId || 'SYSTEM',
+      actorRole: 'SECURITY_ADMIN',
+      actionType: updated.isActive ? 'DEVICE_ACTIVATED' : 'DEVICE_DEACTIVATED',
+      deviceId: updated.deviceId,
+      details: `Terminal access ${updated.isActive ? 'restored' : 'revoked'} for ID: ${updated.deviceId}`,
+    } as any);
+
+    return updated;
+  }
+
+  async listDevices(includeInactive = true): Promise<DeviceWithUser[]> {
     const allDevices = await deviceRepository.findAll(includeInactive);
 
     const enriched = await Promise.all(
@@ -149,6 +172,7 @@ export class DeviceService {
           osVersion: device.osVersion,
           appVersion: device.appVersion,
           installationId: device.installationId,
+          isApproved: device.isApproved,
           user,
         };
       }),
@@ -192,6 +216,7 @@ export class DeviceService {
       osVersion: device.osVersion,
       appVersion: device.appVersion,
       installationId: device.installationId,
+      isApproved: device.isApproved,
       user,
     };
   }

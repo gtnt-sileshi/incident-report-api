@@ -58,20 +58,15 @@ export async function registerDevice(
   }
 }
 
-// ─── PATCH /api/devices/:id/deactivate ───────────────────────────────────────
-
-/**
- * Deactivates a registered device.
- * Requirements: 3.7
- */
-export async function deactivateDevice(
+// ─── PATCH /api/devices/:id/toggle ──────────────────────────────────────────
+export async function toggleDeviceStatus(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   try {
     const { id } = req.params;
-    const device = await deviceService.deactivateDevice(id);
+    const device = await deviceService.toggleDeviceStatus(id);
     res.status(200).json({ device });
   } catch (err) {
     next(err);

@@ -58,45 +58,48 @@ export async function login(
       const deviceId = body.deviceId;
       let device = await deviceRepository.findByDeviceId(deviceId);
 
-      if (!device) {
-        // Check if this user already has a different device registered
-        const existingUserDevice = await deviceRepository.findByUserId(user.id);
+      const existingUserDevice = await deviceRepository.findByUserId(user.id);
 
+      if (!device) {
         if (existingUserDevice) {
-          // User has a different device — update it to the new device ID
-          // and reset approval so an admin can verify the new device
-          await deviceRepository.update(existingUserDevice.id, {
-            deviceId,
-            deviceName: body.deviceName ?? existingUserDevice.deviceName ?? '',
-            model:      body.model      ?? existingUserDevice.model      ?? '',
-            osVersion:  body.osVersion  ?? existingUserDevice.osVersion  ?? '',
-            appVersion: body.appVersion ?? existingUserDevice.appVersion ?? '',
-            isApproved: false,
-            isActive:   true,
-          });
-          throw new AppError(403, 'DEVICE_PENDING_APPROVAL', 'New device registered — waiting for administrator approval');
+          // User is already bound to a different device
+          throw new AppError(403, 'DEVICE_MISMATCH', 'This account is locked to a different device. Please contact support to reset your device binding.');
         }
 
-        // No existing device — register fresh
-        await deviceRepository.register({
+        // No device bound to user, and this device ID is new to the system
+        // Register and AUTO-APPROVE as the primary device for this user
+        device = await deviceRepository.register({
           deviceId,
           userId:     user.id,
-          deviceName: body.deviceName ?? '',
-          model:      body.model      ?? '',
-          osVersion:  body.osVersion  ?? '',
-          appVersion: body.appVersion ?? '',
-          isApproved: false,
+          deviceName: body.deviceName ?? 'Mobile Terminal',
+          model:      body.model      ?? 'Unknown',
+          osVersion:  body.osVersion  ?? 'Unknown',
+          appVersion: body.appVersion ?? '1.0.0',
+          isApproved: true, // Auto-approve the first binding
           isActive:   true,
         });
-        throw new AppError(403, 'DEVICE_PENDING_APPROVAL', 'Device registered — waiting for administrator approval');
-      }
+      } else {
+        // Device exists in system
+        if (device.userId && device.userId !== user.id) {
+          throw new AppError(403, 'DEVICE_ALREADY_BOUND', 'This device is already registered to another user.');
+        }
 
-      if (!device.isApproved) {
-        throw new AppError(403, 'DEVICE_PENDING_APPROVAL', 'Device is pending administrator approval');
+        if (!device.userId) {
+          // Device exists but unassigned? (Shouldn't happen with auto-binding, but handle it)
+          if (existingUserDevice) {
+             throw new AppError(403, 'DEVICE_MISMATCH', 'Your account is already bound to another device.');
+          }
+          await deviceRepository.update(device.id, { userId: user.id, isApproved: true });
+        } else if (device.userId === user.id) {
+          // Correct binding
+          if (!device.isApproved) {
+            await deviceRepository.update(device.id, { isApproved: true });
+          }
+        }
       }
 
       if (!device.isActive) {
-        throw new AppError(403, 'DEVICE_REVOKED', 'This device has been revoked');
+        throw new AppError(403, 'DEVICE_REVOKED', 'This device has been revoked. Access denied.');
       }
 
       // Update last seen timestamp

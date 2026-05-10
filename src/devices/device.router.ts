@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listDevices, registerDevice, deactivateDevice } from './device.controller';
+import { listDevices, registerDevice, toggleDeviceStatus } from './device.controller';
 import { authenticate } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
 
@@ -30,15 +30,14 @@ router.post(
 );
 
 /**
- * PATCH /api/devices/:id/deactivate
- * Deactivates a registered device.
- * Requirements: 3.7
+ * PATCH /api/devices/:id/toggle
+ * Toggles a registered device (active/inactive).
  */
 router.patch(
-  '/:id/deactivate',
+  '/:id/toggle',
   authenticate,
   requirePermission('devices.deactivate'),
-  deactivateDevice,
+  toggleDeviceStatus,
 );
 
 export default router;
