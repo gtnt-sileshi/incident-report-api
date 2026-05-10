@@ -5,6 +5,7 @@ import {
   updateUser,
   deactivateUser,
   getMe,
+  getUser,
 } from './user.controller';
 import { authenticate } from '../middleware/auth';
 import { requirePermission } from '../middleware/permission';
@@ -45,5 +46,11 @@ router.patch(
   requirePermission('users.delete'),
   deactivateUser,
 );
+
+/**
+ * GET /api/users/:id
+ * Fetches user details for identity verification.
+ */
+router.get('/:id', authenticate, requirePermission('identity.view'), getUser);
 
 export default router;

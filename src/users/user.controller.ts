@@ -157,3 +157,68 @@ export async function getMe(
     next(err);
   }
 }
+
+export async function getUser(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = req.params;
+    const user = await userService.getUser(id);
+
+    const userRoles   = await roleRepository.getRolesForUser(id);
+    const permissions = await permissionService.resolvePermissions(id);
+
+    // Resolve deployment IDs to names
+    const { locationRepository } = await import('../catalog/location.repository');
+    let regionName: string | null = null;
+    let examCenterName: string | null = null;
+    let examRoomName: string | null = null;
+
+    if (user.regionId) {
+      const region = await locationRepository.findRegionById(user.regionId);
+      regionName = region?.name ?? null;
+    }
+    if (user.examCenterId) {
+      const { getDb } = await import('../db/index');
+      const { examCenters } = await import('../db/schema');
+      const { eq } = await import('drizzle-orm');
+      const [center] = await getDb().select().from(examCenters).where(eq(examCenters.id, user.examCenterId));
+      examCenterName = center?.name ?? null;
+    }
+    if (user.examRoomId) {
+      const { getDb } = await import('../db/index');
+      const { examRooms } = await import('../db/schema');
+      const { eq } = await import('drizzle-orm');
+      const [room] = await getDb().select().from(examRooms).where(eq(examRooms.id, user.examRoomId));
+      examRoomName = room?.name ?? null;
+    }
+
+    res.status(200).json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        roles: userRoles.map((r) => r.name),
+        permissions,
+        regionId: user.regionId,
+        regionName,
+        examCenterId: user.examCenterId,
+        examCenterName,
+        examRoomId: user.examRoomId,
+        examRoomName,
+        powerClusterId: user.powerClusterId,
+        internetClusterId: user.internetClusterId,
+        isActive: user.isActive,
+        phoneNumber: user.phoneNumber,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        device: user.device,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}

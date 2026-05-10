@@ -81,19 +81,19 @@ export async function getIncident(
       auditLogRepository.findByIncident(id),
     ]);
 
-    // Enrich comments with author names
+    // Enrich comments with author names and roles
     const { userRepository } = await import('../users/user.repository');
     const authorIds = [...new Set(comments.map((c) => c.authorId))];
-    const authorMap = new Map<string, string>();
+    const authorMap = new Map<string, { name: string; role: string }>();
     await Promise.all(
       authorIds.map(async (authorId) => {
         const author = await userRepository.findById(authorId);
-        if (author) authorMap.set(authorId, author.name);
+        if (author) authorMap.set(authorId, { name: author.name, role: author.role });
       }),
     );
     const enrichedComments = comments.map((c) => ({
       ...c,
-      authorName: authorMap.get(c.authorId) ?? null,
+      author: authorMap.get(c.authorId) ?? null,
     }));
 
     // Enrich audit entries with actor names
