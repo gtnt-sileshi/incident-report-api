@@ -58,6 +58,14 @@ export class UserRepository {
     return this.db.select().from(users).where(and(...conditions));
   }
 
+  async listUsersByRoleInRegion(role: string, regionId: string, includeInactive = false): Promise<User[]> {
+    const conditions = [eq(users.role, role), eq(users.regionId, regionId)];
+    if (!includeInactive) {
+      conditions.push(eq(users.isActive, true));
+    }
+    return this.db.select().from(users).where(and(...conditions));
+  }
+
   async findById(id: string): Promise<User | null> {
     const rows = await this.db
       .select()

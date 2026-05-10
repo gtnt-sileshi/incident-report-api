@@ -10,6 +10,8 @@ import { Incident, NewIncident } from '../db/schema';
 import { JwtPayload } from '../auth/jwt.service';
 import { withTransaction } from '../db';
 import { getRedis } from '../db/redis';
+import { notificationService } from '../notifications/notification.service';
+import { userRepository } from '../users/user.repository';
 
 // ─── Helper: publish a WebSocket event to the region's Redis channel ─────────
 
@@ -209,7 +211,22 @@ export class IncidentService {
       reportedByUserId: incident.reportedByUserId,
     });
 
+    // Notify Regional Dispatchers (Non-blocking)
+    if (regionId && status !== 'Draft') {
+      this.notifyDispatchers(regionId, incident).catch(err => 
+        console.error('[IncidentService] Failed to notify dispatchers:', err));
+    }
+
     return incident;
+  }
+
+  private async notifyDispatchers(regionId: string, incident: Incident): Promise<void> {
+    const dispatchers = await userRepository.listUsersByRoleInRegion('regional_dispatcher', regionId);
+    const message = `New ${incident.priority} priority incident reported: ${incident.trackingNumber ?? incident.id.substring(0,8)}`;
+    
+    await Promise.allSettled(dispatchers.map((d: { id: string }) => 
+      notificationService.createNotification(d.id, incident.id, message)
+    ));
   }
 
   async updateStatus(
@@ -277,6 +294,13 @@ export class IncidentService {
       resolvedAt:       newStatus === 'Resolved' ? updated.resolvedAt : null,
     });
 
+    // Notify Reporter (Non-blocking)
+    if (updated.reportedByUserId && updated.reportedByUserId !== requestingUser.sub) {
+      const message = `Incident ${updated.trackingNumber ?? updated.id.substring(0,8)} status updated to: ${newStatus}`;
+      notificationService.createNotification(updated.reportedByUserId, updated.id, message).catch(err =>
+        console.error('[IncidentService] Failed to notify reporter of status change:', err));
+    }
+
     return updated;
   }
 
@@ -323,6 +347,13 @@ export class IncidentService {
       details: `${isReassignment ? 'Reassigned' : 'Assigned'} incident to user ID ${targetUserId} by ${requestingUser.email}${data.reason ? ` (Reason: ${data.reason})` : ''}`,
     });
 
+    // Notify Assigned User (Non-blocking)
+    if (targetUserId !== requestingUser.sub) {
+      const message = `You have been assigned to incident ${updated.trackingNumber ?? updated.id.substring(0,8)} (${updated.priority} priority)`;
+      notificationService.createNotification(targetUserId, updated.id, message).catch(err =>
+        console.error('[IncidentService] Failed to notify assigned user:', err));
+    }
+
     return updated;
   }
 
@@ -360,6 +391,18 @@ export class IncidentService {
       newValue:      comment.id,
       details: `New comment added by ${requestingUser.email}`,
     });
+
+    // Notify Relevant Parties (Non-blocking)
+    const notificationTargets = new Set<string>();
+    if (incident.reportedByUserId !== requestingUser.sub) notificationTargets.add(incident.reportedByUserId);
+    if (incident.assignedUserId && incident.assignedUserId !== requestingUser.sub) notificationTargets.add(incident.assignedUserId);
+
+    const msg = `New comment on incident ${incident.trackingNumber ?? incident.id.substring(0,8)} from ${requestingUser.role.replace('_', ' ')}`;
+    
+    for (const targetId of notificationTargets) {
+      notificationService.createNotification(targetId, incident.id, msg).catch(err =>
+        console.error('[IncidentService] Failed to notify party of new comment:', err));
+    }
 
     return comment;
   }

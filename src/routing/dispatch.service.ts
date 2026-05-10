@@ -3,6 +3,7 @@ import { incidentRepository } from '../incidents/incident.repository';
 import { auditLogRepository } from '../audit/audit-log.repository';
 import { userRepository } from '../users/user.repository';
 import { Incident } from '../db/schema';
+import { notificationService } from '../notifications/notification.service';
 
 // System actor UUID used for automated audit log entries
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
@@ -55,6 +56,11 @@ export class DispatchService {
         previousValue: null,
         newValue:      JSON.stringify({ ruleId: rule.id, targetUserId: rule.targetUserId }),
       });
+
+      // Notify Target User (Non-blocking)
+      const message = `Auto-assigned: New ${incident.priority} priority incident ${incident.trackingNumber ?? incident.id.substring(0,8)}`;
+      notificationService.createNotification(rule.targetUserId!, incident.id, message).catch(err =>
+        console.error('[DispatchService] Failed to notify auto-assigned user:', err));
 
       // Stop after the first matching rule
       return;
