@@ -208,7 +208,7 @@ export class IncidentRepository {
       .select()
       .from(incidents)
       .where(
-        sql`${incidents.status} = 'In-Progress'
+        sql`${incidents.status} = 'In Progress'
           AND EXTRACT(EPOCH FROM (NOW() - ${incidents.createdAt})) / 60
             > CASE ${incidents.priority} ${sql.raw(caseExpr)} END`,
       );
