@@ -52,7 +52,7 @@ export async function createIncidentType(
 ): Promise<void> {
   try {
     const body = createIncidentTypeSchema.parse(req.body);
-    const type = await incidentTypeService.createIncidentType(body);
+    const type = await incidentTypeService.createIncidentType(body, req.user);
     res.status(201).json({ incidentType: type });
   } catch (err) {
     next(err);
@@ -73,7 +73,7 @@ export async function updateIncidentType(
   try {
     const { id } = req.params;
     const body = updateIncidentTypeSchema.parse(req.body);
-    const type = await incidentTypeService.updateIncidentType(id, body);
+    const type = await incidentTypeService.updateIncidentType(id, body, req.user);
     res.status(200).json({ incidentType: type });
   } catch (err) {
     next(err);
@@ -94,7 +94,7 @@ export async function deleteIncidentType(
 ): Promise<void> {
   try {
     const { id } = req.params;
-    const type = await incidentTypeService.softDeleteIncidentType(id);
+    const type = await incidentTypeService.softDeleteIncidentType(id, req.user);
     res.status(200).json({ incidentType: type });
   } catch (err) {
     next(err);

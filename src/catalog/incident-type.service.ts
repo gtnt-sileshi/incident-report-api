@@ -1,6 +1,8 @@
 import { incidentTypeRepository } from './incident-type.repository';
 import { AppError } from '../middleware/errorHandler';
 import { IncidentType, NewIncidentType, IssueCategory } from '../db/schema';
+import { auditLogRepository } from '../audit/audit-log.repository';
+import { JwtPayload } from '../auth/jwt.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,6 +19,7 @@ export class IncidentTypeService {
    */
   async createIncidentType(
     data: Pick<NewIncidentType, 'name' | 'categoryId' | 'defaultPriority' | 'description'>,
+    requestingUser?: JwtPayload,
   ): Promise<IncidentType> {
     // Check for name uniqueness
     const existing = await incidentTypeRepository.findByName(data.name);
@@ -28,12 +31,23 @@ export class IncidentTypeService {
       );
     }
 
-    return incidentTypeRepository.create({
+    const type = await incidentTypeRepository.create({
       name: data.name,
       categoryId: data.categoryId,
       defaultPriority: data.defaultPriority,
       description: data.description ?? null,
     });
+
+    // Audit
+    await auditLogRepository.append({
+      actorUserId: requestingUser?.sub ?? 'SYSTEM',
+      actorRole: requestingUser?.role ?? 'CATALOG_ADMIN',
+      actionType: 'INCIDENT_TYPE_CREATED',
+      newValue: JSON.stringify(type),
+      details: `New incident type "${type.name}" created by ${requestingUser?.email ?? 'System'}`,
+    });
+
+    return type;
   }
 
   /**
@@ -44,6 +58,7 @@ export class IncidentTypeService {
   async updateIncidentType(
     id: string,
     data: Partial<Pick<NewIncidentType, 'name' | 'defaultPriority' | 'description' | 'isActive'>>,
+    requestingUser?: JwtPayload,
   ): Promise<IncidentType> {
     // If renaming, check uniqueness
     if (data.name) {
@@ -57,10 +72,21 @@ export class IncidentTypeService {
       }
     }
 
+    const existing = await incidentTypeRepository.findById(id);
     const updated = await incidentTypeRepository.update(id, data);
     if (!updated) {
       throw new AppError(404, 'INCIDENT_TYPE_NOT_FOUND', `Incident type ${id} not found`);
     }
+
+    // Audit
+    await auditLogRepository.append({
+      actorUserId: requestingUser?.sub ?? 'SYSTEM',
+      actorRole: requestingUser?.role ?? 'CATALOG_ADMIN',
+      actionType: 'INCIDENT_TYPE_UPDATED',
+      previousValue: JSON.stringify(existing),
+      newValue: JSON.stringify(updated),
+      details: `Incident type "${updated.name}" updated by ${requestingUser?.email ?? 'System'}`,
+    });
 
     return updated;
   }
@@ -70,7 +96,7 @@ export class IncidentTypeService {
    * Rejects deletion if the type is referenced by routing rules OR historical incidents.
    * Requirements: 19.7, 19.8
    */
-  async softDeleteIncidentType(id: string): Promise<IncidentType> {
+  async softDeleteIncidentType(id: string, requestingUser?: JwtPayload): Promise<IncidentType> {
     const incidentType = await incidentTypeRepository.findById(id);
     if (!incidentType) {
       throw new AppError(404, 'INCIDENT_TYPE_NOT_FOUND', `Incident type ${id} not found`);
@@ -95,6 +121,16 @@ export class IncidentTypeService {
     if (!deactivated) {
       throw new AppError(404, 'INCIDENT_TYPE_NOT_FOUND', `Incident type ${id} not found`);
     }
+
+    // Audit
+    await auditLogRepository.append({
+      actorUserId: requestingUser?.sub ?? 'SYSTEM',
+      actorRole: requestingUser?.role ?? 'CATALOG_ADMIN',
+      actionType: 'INCIDENT_TYPE_DEACTIVATED',
+      previousValue: JSON.stringify(incidentType),
+      newValue: JSON.stringify(deactivated),
+      details: `Incident type "${incidentType.name}" deactivated by ${requestingUser?.email ?? 'System'}`,
+    });
 
     return deactivated;
   }

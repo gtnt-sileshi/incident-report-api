@@ -42,7 +42,7 @@ export interface UserWithDevice extends Omit<User, 'passwordHash'> {
 }
 
 export class UserService {
-  async createUser(data: CreateUserData): Promise<User> {
+  async createUser(data: CreateUserData, requestingUser?: JwtPayload): Promise<User> {
     if (data.email) {
       const existing = await userRepository.findByEmail(data.email);
       if (existing) {
@@ -75,18 +75,18 @@ export class UserService {
     const user = await userRepository.create(newUser);
 
     await auditLogRepository.append({
-      actorUserId: user.id,
-      actorRole: user.role,
+      actorUserId: requestingUser?.sub ?? user.id,
+      actorRole: requestingUser?.role ?? user.role,
       actionType: 'USER_CREATED',
-      details: `User ${user.name} was registered with role ${user.role}`,
-    } as any);
+      details: `User ${user.name} (${user.email}) was created with role ${user.role} by ${requestingUser?.email ?? 'System'}`,
+    });
 
     return user;
 
     return user;
   }
 
-  async updateUser(id: string, data: UpdateUserData): Promise<User> {
+  async updateUser(id: string, data: UpdateUserData, requestingUser?: JwtPayload): Promise<User> {
     const user = await userRepository.findById(id);
     if (!user) {
       throw new AppError(404, 'USER_NOT_FOUND', `User ${id} not found`);
@@ -124,18 +124,18 @@ export class UserService {
     }
 
     await auditLogRepository.append({
-      actorUserId: id,
-      actorRole: updated.role,
+      actorUserId: requestingUser?.sub ?? id,
+      actorRole: requestingUser?.role ?? updated.role,
       actionType: 'USER_UPDATED',
-      details: `User profile modified. Fields: ${Object.keys(data).filter(k => data[k as keyof typeof data] !== undefined).join(', ')}`,
-    } as any);
+      details: `User profile (${updated.name}) modified by ${requestingUser?.email ?? 'System'}. Fields: ${Object.keys(data).filter(k => data[k as keyof typeof data] !== undefined).join(', ')}`,
+    });
 
     // Device update via profile is now optional/removed as binding is handled on login.
 
     return updated;
   }
 
-  async deactivateUser(id: string): Promise<User> {
+  async deactivateUser(id: string, requestingUser?: JwtPayload): Promise<User> {
     const user = await userRepository.findById(id);
     if (!user) {
       throw new AppError(404, 'USER_NOT_FOUND', `User ${id} not found`);
@@ -157,11 +157,11 @@ export class UserService {
     }
 
     await auditLogRepository.append({
-      actorUserId: id,
-      actorRole: user.role,
+      actorUserId: requestingUser?.sub ?? id,
+      actorRole: requestingUser?.role ?? user.role,
       actionType: 'USER_DEACTIVATED',
-      details: `User account suspended`,
-    } as any);
+      details: `User account (${user.name}) suspended by ${requestingUser?.email ?? 'System'}`,
+    });
 
     return deactivated;
   }

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { examPeriodRepository } from './exam-period.repository';
 import { AppError } from '../middleware/errorHandler';
+import { auditLogRepository } from '../audit/audit-log.repository';
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
@@ -44,6 +45,15 @@ export async function createExamPeriod(req: Request, res: Response, next: NextFu
       endDate:   end,
     });
 
+    // Audit
+    await auditLogRepository.append({
+      actorUserId: req.user!.sub,
+      actorRole: req.user!.role,
+      actionType: 'EXAM_PERIOD_CREATED',
+      newValue: JSON.stringify(period),
+      details: `New exam period "${period.name}" created by ${req.user!.email}`,
+    });
+
     res.status(201).json({ examPeriod: period });
   } catch (err) {
     next(err);
@@ -69,10 +79,21 @@ export async function updateExamPeriod(req: Request, res: Response, next: NextFu
     if (body.startDate !== undefined) updateData.startDate = new Date(body.startDate);
     if (body.endDate   !== undefined) updateData.endDate   = new Date(body.endDate);
 
+    const existing = await examPeriodRepository.findById(id);
     const period = await examPeriodRepository.update(id, updateData);
     if (!period) {
       throw new AppError(404, 'NOT_FOUND', 'Exam period not found');
     }
+
+    // Audit
+    await auditLogRepository.append({
+      actorUserId: req.user!.sub,
+      actorRole: req.user!.role,
+      actionType: 'EXAM_PERIOD_UPDATED',
+      previousValue: JSON.stringify(existing),
+      newValue: JSON.stringify(period),
+      details: `Exam period "${period.name}" updated by ${req.user!.email}`,
+    });
 
     res.status(200).json({ examPeriod: period });
   } catch (err) {
@@ -88,6 +109,16 @@ export async function deleteExamPeriod(req: Request, res: Response, next: NextFu
       throw new AppError(404, 'NOT_FOUND', 'Exam period not found');
     }
     await examPeriodRepository.delete(id);
+
+    // Audit
+    await auditLogRepository.append({
+      actorUserId: req.user!.sub,
+      actorRole: req.user!.role,
+      actionType: 'EXAM_PERIOD_DELETED',
+      previousValue: JSON.stringify(existing),
+      details: `Exam period "${existing.name}" deleted by ${req.user!.email}`,
+    });
+
     res.status(204).end();
   } catch (err) {
     next(err);
@@ -102,6 +133,17 @@ export async function activateExamPeriod(req: Request, res: Response, next: Next
       throw new AppError(404, 'NOT_FOUND', 'Exam period not found');
     }
     const period = await examPeriodRepository.activate(id);
+
+    // Audit
+    await auditLogRepository.append({
+      actorUserId: req.user!.sub,
+      actorRole: req.user!.role,
+      actionType: 'EXAM_PERIOD_ACTIVATED',
+      previousValue: JSON.stringify(existing),
+      newValue: JSON.stringify(period),
+      details: `Exam period "${period.name}" set as active by ${req.user!.email}`,
+    });
+
     res.status(200).json({ examPeriod: period });
   } catch (err) {
     next(err);
@@ -116,6 +158,17 @@ export async function deactivateExamPeriod(req: Request, res: Response, next: Ne
       throw new AppError(404, 'NOT_FOUND', 'Exam period not found');
     }
     const period = await examPeriodRepository.deactivate(id);
+
+    // Audit
+    await auditLogRepository.append({
+      actorUserId: req.user!.sub,
+      actorRole: req.user!.role,
+      actionType: 'EXAM_PERIOD_DEACTIVATED',
+      previousValue: JSON.stringify(existing),
+      newValue: JSON.stringify(period),
+      details: `Exam period "${period.name}" deactivated by ${req.user!.email}`,
+    });
+
     res.status(200).json({ examPeriod: period });
   } catch (err) {
     next(err);

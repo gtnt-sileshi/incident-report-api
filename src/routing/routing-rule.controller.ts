@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { routingRuleRepository } from './routing-rule.repository';
 import { AppError } from '../middleware/errorHandler';
+import { auditLogRepository } from '../audit/audit-log.repository';
 
 // ─── Validation Schemas ───────────────────────────────────────────────────────
 
@@ -61,6 +62,16 @@ export async function createRoutingRule(
       priority:       body.priority,
       isActive:       body.isActive,
     });
+
+    // Audit
+    await auditLogRepository.append({
+      actorUserId: req.user!.sub,
+      actorRole: req.user!.role,
+      actionType: 'ROUTING_RULE_CREATED',
+      newValue: JSON.stringify(rule),
+      details: `Routing rule created for target user ID ${rule.targetUserId} by ${req.user!.email}`,
+    });
+
     res.status(201).json({ routingRule: rule });
   } catch (err) {
     next(err);
@@ -87,6 +98,17 @@ export async function updateRoutingRule(
     }
 
     const updated = await routingRuleRepository.update(id, body);
+
+    // Audit
+    await auditLogRepository.append({
+      actorUserId: req.user!.sub,
+      actorRole: req.user!.role,
+      actionType: 'ROUTING_RULE_UPDATED',
+      previousValue: JSON.stringify(existing),
+      newValue: JSON.stringify(updated),
+      details: `Routing rule ID ${id} modified by ${req.user!.email}`,
+    });
+
     res.status(200).json({ routingRule: updated });
   } catch (err) {
     next(err);
@@ -112,6 +134,16 @@ export async function deleteRoutingRule(
     }
 
     await routingRuleRepository.delete(id);
+
+    // Audit
+    await auditLogRepository.append({
+      actorUserId: req.user!.sub,
+      actorRole: req.user!.role,
+      actionType: 'ROUTING_RULE_DELETED',
+      previousValue: JSON.stringify(existing),
+      details: `Routing rule ID ${id} deleted by ${req.user!.email}`,
+    });
+
     res.status(204).send();
   } catch (err) {
     next(err);

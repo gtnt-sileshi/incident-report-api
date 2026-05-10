@@ -210,6 +210,7 @@ export const auditLog = pgTable('audit_log', {
   fieldChanged:  varchar('field_changed', { length: 100 }),
   previousValue: text('previous_value'),
   newValue:      text('new_value'),
+  details:       text('details'), // New field for descriptive text
   occurredAt:    timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

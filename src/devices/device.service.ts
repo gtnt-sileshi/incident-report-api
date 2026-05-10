@@ -5,6 +5,7 @@ import { Device, NewDevice } from '../db/schema';
 import { getDb } from '../db/index';
 import { users } from '../db/schema';
 import { auditLogRepository } from '../audit/audit-log.repository';
+import { JwtPayload } from '../auth/jwt.service';
 
 export interface RegisterDeviceData {
   deviceId: string;
@@ -90,7 +91,7 @@ export class DeviceService {
     return device;
   }
 
-  async deactivateDevice(id: string): Promise<Device> {
+  async deactivateDevice(id: string, requestingUser?: JwtPayload): Promise<Device> {
     const device = await deviceRepository.findById(id);
     if (!device) {
       throw new AppError(404, 'DEVICE_NOT_FOUND', `Device ${id} not found`);
@@ -106,17 +107,17 @@ export class DeviceService {
     }
 
     await auditLogRepository.append({
-      actorUserId: deactivated.userId || 'SYSTEM',
-      actorRole: 'SECURITY_ADMIN',
+      actorUserId: requestingUser?.sub ?? (deactivated.userId || 'SYSTEM'),
+      actorRole: requestingUser?.role ?? 'SECURITY_ADMIN',
       actionType: 'DEVICE_DEACTIVATED',
       deviceId: deactivated.deviceId,
-      details: `Terminal access revoked for ID: ${deactivated.deviceId}`,
-    } as any);
+      details: `Terminal access revoked for ID: ${deactivated.deviceId} by ${requestingUser?.email ?? 'System'}`,
+    });
 
     return deactivated;
   }
 
-  async toggleDeviceStatus(id: string): Promise<Device> {
+  async toggleDeviceStatus(id: string, requestingUser?: JwtPayload): Promise<Device> {
     const device = await deviceRepository.findById(id);
     if (!device) {
       throw new AppError(404, 'DEVICE_NOT_FOUND', `Device ${id} not found`);
@@ -128,12 +129,12 @@ export class DeviceService {
     }
 
     await auditLogRepository.append({
-      actorUserId: updated.userId || 'SYSTEM',
-      actorRole: 'SECURITY_ADMIN',
+      actorUserId: requestingUser?.sub ?? (updated.userId || 'SYSTEM'),
+      actorRole: requestingUser?.role ?? 'SECURITY_ADMIN',
       actionType: updated.isActive ? 'DEVICE_ACTIVATED' : 'DEVICE_DEACTIVATED',
       deviceId: updated.deviceId,
-      details: `Terminal access ${updated.isActive ? 'restored' : 'revoked'} for ID: ${updated.deviceId}`,
-    } as any);
+      details: `Terminal access ${updated.isActive ? 'restored' : 'revoked'} for ID: ${updated.deviceId} by ${requestingUser?.email ?? 'System'}`,
+    });
 
     return updated;
   }

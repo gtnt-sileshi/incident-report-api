@@ -164,6 +164,12 @@ export const locationRepository = {
     await db.delete(zones).where(eq(zones.id, id));
   },
 
+  async findZoneById(id: string) {
+    const db = getDb();
+    const [zone] = await db.select().from(zones).where(eq(zones.id, id));
+    return zone ?? null;
+  },
+
   // Woredas
   async listWoredas(zoneId?: string) {
     const db = getDb();
@@ -200,6 +206,12 @@ export const locationRepository = {
     await db.delete(woredas).where(eq(woredas.id, id));
   },
 
+  async findWoredaById(id: string) {
+    const db = getDb();
+    const [woreda] = await db.select().from(woredas).where(eq(woredas.id, id));
+    return woreda ?? null;
+  },
+
   // Exam Centers
   async listExamCenters(_regionId?: string) {
     const db = getDb();
@@ -234,6 +246,12 @@ export const locationRepository = {
     await db.delete(examCenters).where(eq(examCenters.id, id));
   },
 
+  async findExamCenterById(id: string) {
+    const db = getDb();
+    const [center] = await db.select().from(examCenters).where(eq(examCenters.id, id));
+    return center ?? null;
+  },
+
   // Rooms
   async listRooms(centerId: string) {
     const db = getDb();
@@ -261,6 +279,12 @@ export const locationRepository = {
   async deletePowerCluster(id: string) {
     const db = getDb();
     await db.delete(powerClusters).where(eq(powerClusters.id, id));
+  },
+
+  async findPowerClusterById(id: string) {
+    const db = getDb();
+    const [cluster] = await db.select().from(powerClusters).where(eq(powerClusters.id, id));
+    return cluster ?? null;
   },
 
   async findExamCentersByPowerCluster(clusterId: string) {
@@ -292,6 +316,12 @@ export const locationRepository = {
     await db.delete(internetClusters).where(eq(internetClusters.id, id));
   },
 
+  async findInternetClusterById(id: string) {
+    const db = getDb();
+    const [cluster] = await db.select().from(internetClusters).where(eq(internetClusters.id, id));
+    return cluster ?? null;
+  },
+
   async findExamCentersByInternetCluster(clusterId: string) {
     const db = getDb();
     return db.select({ id: examCenters.id, name: examCenters.name })
@@ -315,5 +345,11 @@ export const locationRepository = {
   async deleteExamRoom(id: string) {
     const db = getDb();
     await db.delete(examRooms).where(eq(examRooms.id, id));
+  },
+
+  async findExamRoomById(id: string) {
+    const db = getDb();
+    const [room] = await db.select().from(examRooms).where(eq(examRooms.id, id));
+    return room ?? null;
   },
 };

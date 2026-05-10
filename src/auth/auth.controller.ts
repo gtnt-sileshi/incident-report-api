@@ -8,6 +8,7 @@ import { deviceService } from './device.service';
 import { AppError } from '../middleware/errorHandler';
 import { roleRepository } from '../roles/role.repository';
 import { permissionService } from '../roles/permission.service';
+import { auditLogRepository } from '../audit/audit-log.repository';
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
@@ -152,6 +153,15 @@ export async function login(
 
     await jwtService.clearRevocation(user.id);
 
+    // Audit Login
+    await auditLogRepository.append({
+      actorUserId: user.id,
+      actorRole: primaryRoleName,
+      actionType: 'LOGIN_SUCCESS',
+      deviceId: body.deviceId ?? 'WEB_DASHBOARD',
+      details: `User ${user.name} logged in via ${body.deviceId ? 'Mobile App' : 'Web Browser'}`,
+    });
+
     res.status(200).json({
       token,
       user: {
@@ -255,7 +265,16 @@ export async function logout(
 ): Promise<void> {
   try {
     const userId = req.user!.sub;
+    const userRole = req.user!.role;
     await jwtService.revokeUserSessions(userId);
+
+    // Audit Logout
+    await auditLogRepository.append({
+      actorUserId: userId,
+      actorRole: userRole,
+      actionType: 'LOGOUT_SUCCESS',
+      details: `User session terminated`,
+    });
 
     res.status(200).json({ message: 'Logged out successfully' });
   } catch (err) {

@@ -185,6 +185,7 @@ export class IncidentService {
       fieldChanged:  'status',
       previousValue: null,
       newValue:      status,
+      details: `Incident created with status "${status}" by ${requestingUser.email}`,
     });
 
     // Auto-dispatch if the incident is not a draft
@@ -262,6 +263,7 @@ export class IncidentService {
       fieldChanged:  'status',
       previousValue: incident.status,
       newValue:      newStatus,
+      details: `Status changed from "${incident.status}" to "${newStatus}" by ${requestingUser.email}`,
     });
 
     // Broadcast status change to dashboard and mobile clients in real time
@@ -318,6 +320,7 @@ export class IncidentService {
       fieldChanged:  'assigned_user_id',
       previousValue: previousUserId ?? null,
       newValue:      targetUserId,
+      details: `${isReassignment ? 'Reassigned' : 'Assigned'} incident to user ID ${targetUserId} by ${requestingUser.email}${data.reason ? ` (Reason: ${data.reason})` : ''}`,
     });
 
     return updated;
@@ -355,6 +358,7 @@ export class IncidentService {
       fieldChanged:  null,
       previousValue: null,
       newValue:      comment.id,
+      details: `New comment added by ${requestingUser.email}`,
     });
 
     return comment;
@@ -424,6 +428,7 @@ export class IncidentService {
       fieldChanged:  'status',
       previousValue: incident.status,
       newValue:      'Escalated',
+      details: `Incident escalated by ${requestingUser.email}`,
     });
 
     return updated;
@@ -454,6 +459,7 @@ export class IncidentService {
       fieldChanged:  'status',
       previousValue: 'Resolved',
       newValue:      'Closed',
+      details: `Resolution confirmed and incident closed by ${requestingUser.email}`,
     });
 
     return updated;
@@ -485,6 +491,7 @@ export class IncidentService {
       fieldChanged:  'status',
       previousValue: 'Resolved',
       newValue:      'Resolution Rejected',
+      details: `Resolution rejected by ${requestingUser.email}. Reason: ${rejectionReason}`,
     });
 
     // Transition: Resolution Rejected → Reopened + increment reopenCount
@@ -501,6 +508,7 @@ export class IncidentService {
       fieldChanged:  'status',
       previousValue: 'Resolution Rejected',
       newValue:      'Reopened',
+      details: `Incident reopened by system after resolution rejection`,
     });
 
     return updated;

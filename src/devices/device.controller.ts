@@ -74,7 +74,7 @@ export async function toggleDeviceStatus(
 ): Promise<void> {
   try {
     const { id } = req.params;
-    const device = await deviceService.toggleDeviceStatus(id);
+    const device = await deviceService.toggleDeviceStatus(id, req.user);
     res.status(200).json({ device });
   } catch (err) {
     next(err);

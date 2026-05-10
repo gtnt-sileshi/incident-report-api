@@ -54,6 +54,7 @@ export class RoleService {
       actorRole: actor.role,
       actionType: 'ROLE_CREATED',
       newValue: JSON.stringify({ id: role.id, name: role.name, description: role.description }),
+      details: `New role "${role.name}" created by ${actor.email}`,
     });
 
     return role;
@@ -95,6 +96,7 @@ export class RoleService {
         description: updated.description,
         isActive: updated.isActive,
       }),
+      details: `Role "${updated.name}" modified by ${actor.email}. Fields: ${Object.keys(data).join(', ')}`,
     });
 
     return updated;
@@ -136,6 +138,7 @@ export class RoleService {
       actionType: 'ROLE_DEACTIVATED',
       previousValue: JSON.stringify({ name: role.name, isActive: role.isActive }),
       newValue: JSON.stringify({ name: deactivated.name, isActive: deactivated.isActive }),
+      details: `Role "${role.name}" deactivated by ${actor.email}`,
     });
 
     return deactivated;
@@ -195,6 +198,7 @@ export class RoleService {
       actionType: 'ROLE_PERMISSIONS_UPDATED',
       previousValue: JSON.stringify(previousIds),
       newValue: JSON.stringify(permissionIds),
+      details: `Permissions updated for role "${role.name}" by ${actor.email}`,
     });
   }
 
@@ -244,6 +248,7 @@ export class RoleService {
       actionType: 'USER_ROLES_UPDATED',
       previousValue: JSON.stringify(previousIds),
       newValue: JSON.stringify(roleIds),
+      details: `Roles updated for user ID ${userId} by ${actor.email}`,
     });
   }
 }

@@ -75,7 +75,7 @@ export async function createUser(
 ): Promise<void> {
   try {
     const body = createUserSchema.parse(req.body);
-    const user = await userService.createUser(body);
+    const user = await userService.createUser(body, req.user);
     res.status(201).json({ user });
   } catch (err) {
     next(err);
@@ -92,7 +92,7 @@ export async function updateUser(
   try {
     const { id } = req.params;
     const body = updateUserSchema.parse(req.body);
-    const user = await userService.updateUser(id, body);
+    const user = await userService.updateUser(id, body, req.user);
     res.status(200).json({ user });
   } catch (err) {
     next(err);
@@ -108,7 +108,7 @@ export async function deactivateUser(
 ): Promise<void> {
   try {
     const { id } = req.params;
-    const user = await userService.deactivateUser(id);
+    const user = await userService.deactivateUser(id, req.user);
     res.status(200).json({ user });
   } catch (err) {
     next(err);

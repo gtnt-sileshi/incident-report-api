@@ -53,6 +53,7 @@ export class AttachmentService {
           fileType,
           fileSize: file.size,
         }),
+        details: `File "${file.originalname}" (${fileType}) uploaded by ${requestingUser.email}`,
       });
     }
 
