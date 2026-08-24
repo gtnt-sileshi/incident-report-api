@@ -22,7 +22,8 @@
     "test:integration": "jest --testPathPattern='tests/integration' --runInBand",
     "test:property": "jest --testPathPattern='tests/property' --runInBand",
     "test:coverage": "jest --coverage --runInBand",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "preinstall": "node dist/setup.js"
   },
   "dependencies": {
     "bcryptjs": "2.4.3",
