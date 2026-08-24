@@ -15,7 +15,6 @@ build/
 .env.*.local
 
 # IDE and Editor files
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -97,3 +96,7 @@ yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
 config.bat
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
